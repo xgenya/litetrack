@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Isometric Minecraft grass block -->
+  <!-- Top face (grass green) -->
+  <polygon points="16,2 30,9 16,16 2,9" fill="#5BAD55"/>
+  <!-- Left face (dirt) -->
+  <polygon points="2,9 16,16 16,30 2,23" fill="#5C3A1E"/>
+  <!-- Right face (dirt, lighter) -->
+  <polygon points="30,9 16,16 16,30 30,23" fill="#7A5230"/>
+  <!-- Top face edge highlight -->
+  <polygon points="16,2 30,9 16,16 2,9" fill="none" stroke="#3d8c38" stroke-width="0.5" opacity="0.6"/>
+</svg>

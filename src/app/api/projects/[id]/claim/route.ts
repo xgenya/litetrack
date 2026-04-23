@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addClaim, removeClaim, getProject, getLitematic } from "@/lib/db";
 import { Claim } from "@/lib/types";
+import { getSessionUser } from "@/lib/auth";
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 10);
@@ -11,10 +12,16 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const body = await request.json();
-  const { username, blockId, litematicId, boxes } = body;
 
-  if (!username || !blockId || !litematicId || !boxes || boxes < 1) {
+  const sessionUser = await getSessionUser(request);
+  if (!sessionUser) {
+    return NextResponse.json({ error: "请先登录" }, { status: 401 });
+  }
+
+  const body = await request.json();
+  const { blockId, litematicId, boxes } = body;
+
+  if (!blockId || !litematicId || !boxes || boxes < 1) {
     return NextResponse.json({ error: "参数错误" }, { status: 400 });
   }
 
@@ -44,7 +51,8 @@ export async function POST(
 
   const claim: Omit<Claim, "litematicId"> = {
     id: generateId(),
-    username,
+    username: sessionUser.displayUsername,
+    nickname: "",
     blockId,
     boxes,
     createdAt: Date.now(),
@@ -62,8 +70,30 @@ export async function DELETE(
   const { searchParams } = new URL(request.url);
   const claimId = searchParams.get("claimId");
 
+  const sessionUser = await getSessionUser(request);
+  if (!sessionUser) {
+    return NextResponse.json({ error: "请先登录" }, { status: 401 });
+  }
+
   if (!claimId) {
     return NextResponse.json({ error: "缺少 claimId" }, { status: 400 });
+  }
+
+  const project = getProject(id);
+  if (!project) {
+    return NextResponse.json({ error: "项目不存在" }, { status: 404 });
+  }
+
+  const claim = project.claims.find((c) => c.id === claimId);
+  if (!claim) {
+    return NextResponse.json({ error: "认领记录不存在" }, { status: 404 });
+  }
+
+  if (
+    claim.username.toLowerCase() !== sessionUser.username &&
+    !sessionUser.isAdmin
+  ) {
+    return NextResponse.json({ error: "只能取消自己的认领" }, { status: 403 });
   }
 
   const updated = removeClaim(id, claimId);

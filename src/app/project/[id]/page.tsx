@@ -1,17 +1,25 @@
 "use client";
 
 import { useState, useEffect, useCallback, use } from "react";
+import dynamic from "next/dynamic";
 import { useUser } from "@/lib/user-context";
-import { Project, Material, Claim, Litematic, ProjectRole } from "@/lib/types";
+import { Project, Material, Litematic, ProjectRole } from "@/lib/types";
+import { formatUser } from "@/lib/utils";
+import { toast } from "sonner";
+import { McAvatar } from "@/components/McAvatar";
+import { MaterialTable, MaterialWithClaims, LitematicWithMaterials } from "@/components/MaterialTable";
 
-interface ProjectWithRole extends Project {
-  userRole?: ProjectRole | null;
-}
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BlockIcon, BlockIconRaw } from "@/components/BlockIcon";
 import { TopBar } from "@/components/TopBar";
-import { MaterialCharts } from "@/components/MaterialCharts";
+import { getBlockCategory, CATEGORY_ORDER } from "@/lib/block-categories";
+
+const MaterialCharts = dynamic(
+  () => import("@/components/MaterialCharts").then((m) => m.MaterialCharts),
+  { ssr: false, loading: () => <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">加载图表...</div> }
+);
 import {
   Package,
   Layers,
@@ -23,19 +31,13 @@ import {
   Upload,
   Trash2,
   FileBox,
-  ChevronDown,
-  ChevronRight,
   Trophy,
 } from "lucide-react";
 
-interface MaterialWithClaims extends Material {
-  litematicId: string;
-  litematicName: string;
-  claimedBoxes: number;
-  remainingBoxes: number;
-  myClaims: Claim[];
-  allClaims: Claim[];
+interface ProjectWithRole extends Project {
+  userRole?: ProjectRole | null;
 }
+
 
 export default function ProjectPage({
   params,
@@ -50,30 +52,22 @@ export default function ProjectPage({
   const [searchTerm, setSearchTerm] = useState("");
   const [claiming, setClaiming] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [expandedLitematics, setExpandedLitematics] = useState<Set<string>>(
-    new Set()
-  );
 
   const fetchProject = useCallback(async () => {
     try {
-      const url = user 
-        ? `/api/projects/${id}?username=${user.username}`
-        : `/api/projects/${id}`;
-      const res = await fetch(url);
+      const res = await fetch(`/api/projects/${id}`);
       if (!res.ok) {
         throw new Error("项目不存在");
       }
       const data = await res.json();
       setProject(data);
-      if (data.litematics.length > 0) {
-        setExpandedLitematics(new Set(data.litematics.map((l: Litematic) => l.id)));
-      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [id, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, user?.username]);
 
   useEffect(() => {
     fetchProject();
@@ -83,11 +77,11 @@ export default function ProjectPage({
 
   const handleUpload = async (file: File) => {
     if (!user) {
-      alert("请先登录");
+      toast.error("请先登录");
       return;
     }
     if (!file.name.endsWith(".litematic")) {
-      alert("请上传 .litematic 格式的文件");
+      toast.error("请上传 .litematic 格式的文件");
       return;
     }
 
@@ -95,7 +89,6 @@ export default function ProjectPage({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("username", user.username);
 
       const res = await fetch(`/api/projects/${id}/litematics`, {
         method: "POST",
@@ -109,7 +102,7 @@ export default function ProjectPage({
 
       fetchProject();
     } catch (err) {
-      alert((err as Error).message);
+      toast.error((err as Error).message);
     } finally {
       setUploading(false);
     }
@@ -120,7 +113,7 @@ export default function ProjectPage({
     if (!confirm("确定要删除这个投影吗？相关认领记录也会被删除。")) return;
 
     try {
-      const res = await fetch(`/api/projects/${id}/litematics/${litematicId}?username=${user.username}`, {
+      const res = await fetch(`/api/projects/${id}/litematics/${litematicId}`, {
         method: "DELETE",
       });
 
@@ -128,10 +121,10 @@ export default function ProjectPage({
         fetchProject();
       } else {
         const data = await res.json();
-        alert(data.error || "删除失败");
+        toast.error(data.error || "删除失败");
       }
     } catch (err) {
-      alert((err as Error).message);
+      toast.error((err as Error).message);
     }
   };
 
@@ -146,7 +139,6 @@ export default function ProjectPage({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: user.username,
           blockId,
           litematicId,
           boxes,
@@ -161,7 +153,7 @@ export default function ProjectPage({
       const updated = await res.json();
       setProject(updated);
     } catch (err) {
-      alert((err as Error).message);
+      toast.error((err as Error).message);
     } finally {
       setClaiming(null);
     }
@@ -183,29 +175,19 @@ export default function ProjectPage({
       const updated = await res.json();
       setProject(updated);
     } catch (err) {
-      alert((err as Error).message);
+      toast.error((err as Error).message);
     }
   };
 
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "materials" | "stats">("overview");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [claimFilter, setClaimFilter] = useState<"all" | "claimed" | "unclaimed">("all");
 
   const copyLink = () => {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const toggleLitematic = (litematicId: string) => {
-    setExpandedLitematics((prev) => {
-      const next = new Set(prev);
-      if (next.has(litematicId)) {
-        next.delete(litematicId);
-      } else {
-        next.add(litematicId);
-      }
-      return next;
-    });
   };
 
   if (loading) {
@@ -249,8 +231,12 @@ export default function ProjectPage({
     materials: getMaterialsWithClaims(l)
       .filter(
         (m) =>
-          m.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          m.blockId.toLowerCase().includes(searchTerm.toLowerCase())
+          (m.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            m.blockId.toLowerCase().includes(searchTerm.toLowerCase())) &&
+          (categoryFilter === "all" || getBlockCategory(m.blockId) === categoryFilter) &&
+          (claimFilter === "all" ||
+            (claimFilter === "claimed" && m.remainingBoxes === 0) ||
+            (claimFilter === "unclaimed" && m.remainingBoxes > 0))
       )
       .sort((a, b) => b.remainingBoxes - a.remainingBoxes),
   }));
@@ -358,6 +344,29 @@ export default function ProjectPage({
         {activeTab === "overview" && (
           <>
             <div className="grid gap-4 md:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">发起人</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-2">
+                    <McAvatar
+                      username={project.owner}
+                      size={24}
+                      className="w-6 h-6 rounded block-icon"
+                    />
+                    <span className="text-lg font-bold truncate">{project.owner}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {new Date(project.createdAt).toLocaleDateString("zh-CN", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">投影数量</CardTitle>
@@ -537,10 +546,10 @@ export default function ProjectPage({
             )}
 
             {(() => {
-              const userStatsMap: Record<string, { username: string; totalBoxes: number }> = {};
+              const userStatsMap: Record<string, { username: string; nickname: string; totalBoxes: number }> = {};
               project.claims.forEach((claim) => {
                 if (!userStatsMap[claim.username]) {
-                  userStatsMap[claim.username] = { username: claim.username, totalBoxes: 0 };
+                  userStatsMap[claim.username] = { username: claim.username, nickname: claim.nickname, totalBoxes: 0 };
                 }
                 userStatsMap[claim.username].totalBoxes += claim.boxes;
               });
@@ -584,16 +593,13 @@ export default function ProjectPage({
                               <span className="text-sm text-muted-foreground">#{index + 1}</span>
                             )}
                           </div>
-                          <img
-                            src={`https://mc-heads.net/avatar/${stats.username}/32`}
-                            alt={stats.username}
+                          <McAvatar
+                            username={stats.username}
+                            size={32}
                             className="w-8 h-8 rounded block-icon flex-shrink-0"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = "https://mc-heads.net/avatar/MHF_Steve/32";
-                            }}
                           />
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{stats.username}</div>
+                            <div className="font-medium truncate">{formatUser(stats.username, stats.nickname)}</div>
                           </div>
                           <div className="flex items-center gap-1 text-sm font-medium">
                             {stats.totalBoxes}
@@ -614,180 +620,97 @@ export default function ProjectPage({
             {project.litematics.length > 0 ? (
               <Card>
                 <CardHeader>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <CardTitle>材料清单</CardTitle>
-                    <div className="relative w-full sm:w-64">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="搜索材料..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-8"
-                      />
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <CardTitle>材料清单</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                          {(["all", "unclaimed", "claimed"] as const).map((s) => {
+                            const labels = { all: "全部", claimed: "已认领", unclaimed: "未认领" };
+                            return (
+                              <button
+                                key={s}
+                                onClick={() => setClaimFilter(s)}
+                                className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors border ${
+                                  claimFilter === s
+                                    ? s === "claimed"
+                                      ? "bg-green-500 text-white border-green-500"
+                                      : s === "unclaimed"
+                                      ? "bg-orange-500 text-white border-orange-500"
+                                      : "bg-primary text-primary-foreground border-primary"
+                                    : "bg-transparent text-muted-foreground border-border hover:border-foreground/40 hover:text-foreground"
+                                }`}
+                              >
+                                {labels[s]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="relative w-full sm:w-56">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            placeholder="搜索材料..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-8"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["all", ...CATEGORY_ORDER] as const).map((cat) => (
+                        <button
+                          key={cat}
+                          onClick={() => setCategoryFilter(cat)}
+                          className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors border ${
+                            categoryFilter === cat
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-transparent text-muted-foreground border-border hover:border-foreground/40 hover:text-foreground"
+                          }`}
+                        >
+                          {cat === "all" ? "全部" : cat}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {filteredLitematics.map((litematic) => (
-                      <div key={litematic.id} className="border rounded-lg">
-                        <div
-                          className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50"
-                          onClick={() => toggleLitematic(litematic.id)}
-                        >
-                          <div className="flex items-center gap-2">
-                            {expandedLitematics.has(litematic.id) ? (
-                              <ChevronDown className="w-4 h-4" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4" />
-                            )}
-                            <FileBox className="w-4 h-4 text-muted-foreground" />
-                            <span className="font-medium">{litematic.filename}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({litematic.totalTypes} 种材料)
-                            </span>
-                          </div>
-                          {canEdit && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteLitematic(litematic.id);
-                              }}
-                              className="p-1 text-muted-foreground hover:text-destructive"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-
-                        {expandedLitematics.has(litematic.id) && (
-                          <div className="border-t">
-                            <div className="overflow-x-auto">
-                              <table className="w-full">
-                                <thead>
-                                  <tr className="border-b text-left bg-muted/30">
-                                    <th className="p-3 font-medium w-[180px]">材料名称</th>
-                                    <th className="p-3 font-medium text-right w-[100px]">数量</th>
-                                    <th className="p-3 font-medium text-right w-[70px]">需要</th>
-                                    <th className="p-3 font-medium">认领记录</th>
-                                    <th className="p-3 font-medium text-center w-[80px]">操作</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {litematic.materials.map(
-                                    (material: MaterialWithClaims, index: number) => {
-                                      const key = `${litematic.id}-${material.blockId}`;
-                                      return (
-                                        <tr
-                                          key={key}
-                                          className={`border-b last:border-0 ${
-                                            index % 2 === 0 ? "bg-muted/10" : ""
-                                          }`}
-                                        >
-                                          <td className="p-3">
-                                            <div className="flex items-center gap-2">
-                                              <BlockIcon
-                                                blockId={material.blockId}
-                                                size={28}
-                                              />
-                                              <span className="font-medium text-sm truncate max-w-[130px]" title={material.displayName}>
-                                                {material.displayName}
-                                              </span>
-                                            </div>
-                                          </td>
-                                          <td className="p-3 text-right tabular-nums">
-                                            <span className="text-muted-foreground text-sm">
-                                              {material.count.toLocaleString()}
-                                            </span>
-                                          </td>
-                                          <td className="p-3 text-right tabular-nums">
-                                            <span className="inline-flex items-center gap-1 text-blue-500 font-medium">
-                                              {material.boxes}
-                                              <BlockIconRaw
-                                                blockId="minecraft:shulker_box"
-                                                size={14}
-                                              />
-                                            </span>
-                                          </td>
-                                          <td className="p-3">
-                                            {material.allClaims.length > 0 ? (
-                                              <div className="space-y-1.5">
-                                                {material.allClaims.map((claim) => (
-                                                  <div
-                                                    key={claim.id}
-                                                    className={`flex items-center gap-2 text-sm ${
-                                                      user && claim.username === user.username
-                                                        ? "text-primary"
-                                                        : ""
-                                                    }`}
-                                                  >
-                                                    <img
-                                                      src={`https://mc-heads.net/avatar/${claim.username}/24`}
-                                                      alt={claim.username}
-                                                      className="w-5 h-5 rounded block-icon flex-shrink-0"
-                                                      onError={(e) => {
-                                                        (e.target as HTMLImageElement).src = "https://mc-heads.net/avatar/MHF_Steve/24";
-                                                      }}
-                                                    />
-                                                    <span className="truncate max-w-[80px]" title={claim.username}>
-                                                      {claim.username}
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground flex-shrink-0">
-                                                      {new Date(claim.createdAt).toLocaleDateString("zh-CN", {
-                                                        month: "numeric",
-                                                        day: "numeric",
-                                                        hour: "numeric",
-                                                        minute: "numeric",
-                                                      })}
-                                                    </span>
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            ) : (
-                                              <span className="text-xs text-muted-foreground">-</span>
-                                            )}
-                                          </td>
-                                          <td className="p-3">
-                                            {user ? (
-                                              material.remainingBoxes > 0 ? (
-                                                <div className="flex justify-center">
-                                                  <button
-                                                    onClick={() =>
-                                                      handleClaim(
-                                                        litematic.id,
-                                                        material.blockId,
-                                                        material.remainingBoxes
-                                                      )
-                                                    }
-                                                    disabled={claiming === key}
-                                                    className="px-3 py-1 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90 disabled:opacity-50"
-                                                  >
-                                                    {claiming === key ? "..." : "认领"}
-                                                  </button>
-                                                </div>
-                                              ) : (
-                                                <div className="text-center text-muted-foreground text-sm">
-                                                  -
-                                                </div>
-                                              )
-                                            ) : (
-                                              <div className="text-center text-muted-foreground text-sm">
-                                                登录
-                                              </div>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      );
-                                    }
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
+                  {filteredLitematics.length > 1 ? (
+                    <Tabs defaultValue={filteredLitematics[0]?.id}>
+                      <div className="flex items-center justify-between mb-4">
+                        <TabsList className="w-full justify-start overflow-x-auto">
+                          {filteredLitematics.map((litematic) => (
+                            <TabsTrigger key={litematic.id} value={litematic.id} className="gap-1.5 shrink-0">
+                              <FileBox className="w-3.5 h-3.5" />
+                              <span>{litematic.filename}</span>
+                              <span className="text-xs text-muted-foreground">({litematic.totalTypes})</span>
+                            </TabsTrigger>
+                          ))}
+                        </TabsList>
                       </div>
-                    ))}
-                  </div>
+                      {filteredLitematics.map((litematic) => (
+                        <TabsContent key={litematic.id} value={litematic.id}>
+                          <MaterialTable
+                            litematic={litematic}
+                            user={user}
+                            claiming={claiming}
+                            onClaim={handleClaim}
+                          />
+                        </TabsContent>
+                      ))}
+                    </Tabs>
+                  ) : (
+                    filteredLitematics.map((litematic) => (
+                      <div key={litematic.id}>
+                        <MaterialTable
+                          litematic={litematic}
+                          user={user}
+                          claiming={claiming}
+                          onClaim={handleClaim}
+                        />
+                      </div>
+                    ))
+                  )}
                 </CardContent>
               </Card>
             ) : (
@@ -939,10 +862,10 @@ export default function ProjectPage({
                 <MaterialCharts materials={allMaterials} />
 
                 {(() => {
-                  const userStatsMap: Record<string, { username: string; totalBoxes: number; claimCount: number }> = {};
+                  const userStatsMap: Record<string, { username: string; nickname: string; totalBoxes: number; claimCount: number }> = {};
                   project.claims.forEach((claim) => {
                     if (!userStatsMap[claim.username]) {
-                      userStatsMap[claim.username] = { username: claim.username, totalBoxes: 0, claimCount: 0 };
+                      userStatsMap[claim.username] = { username: claim.username, nickname: claim.nickname, totalBoxes: 0, claimCount: 0 };
                     }
                     userStatsMap[claim.username].totalBoxes += claim.boxes;
                     userStatsMap[claim.username].claimCount += 1;
@@ -985,16 +908,13 @@ export default function ProjectPage({
                                   <span className="text-sm text-muted-foreground">#{index + 1}</span>
                                 )}
                               </div>
-                              <img
-                                src={`https://mc-heads.net/avatar/${stats.username}/32`}
-                                alt={stats.username}
+                              <McAvatar
+                                username={stats.username}
+                                size={32}
                                 className="w-8 h-8 rounded block-icon flex-shrink-0"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = "https://mc-heads.net/avatar/MHF_Steve/32";
-                                }}
                               />
                               <div className="flex-1 min-w-0">
-                                <div className="font-medium truncate">{stats.username}</div>
+                                <div className="font-medium truncate">{formatUser(stats.username, stats.nickname)}</div>
                                 <div className="text-xs text-muted-foreground">
                                   {stats.claimCount} 次认领
                                 </div>

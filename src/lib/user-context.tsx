@@ -5,8 +5,10 @@ import { User } from "./types";
 
 interface UserContextType {
   user: User | null;
-  login: (username: string) => void;
-  logout: () => void;
+  login: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  updateNickname: (nickname: string) => Promise<void>;
   isLoading: boolean;
 }
 
@@ -17,31 +19,57 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem("mc_user");
-    if (stored) {
-      try {
-        setUser(JSON.parse(stored));
-      } catch {
-        localStorage.removeItem("mc_user");
-      }
-    }
-    setIsLoading(false);
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.username) {
+          setUser(data as User);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
   }, []);
 
-  const login = (username: string) => {
-    const avatarUrl = `https://mc-heads.net/avatar/${username}/64`;
-    const newUser: User = { username, avatarUrl };
-    setUser(newUser);
-    localStorage.setItem("mc_user", JSON.stringify(newUser));
+  const login = async (username: string, password: string) => {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "登录失败");
+    setUser(data as User);
   };
 
-  const logout = () => {
+  const register = async (username: string, password: string) => {
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "注册失败");
+    setUser(data as User);
+  };
+
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
-    localStorage.removeItem("mc_user");
+  };
+
+  const updateNickname = async (nickname: string) => {
+    const res = await fetch("/api/user/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nickname }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "保存失败");
+    setUser((prev) => (prev ? { ...prev, nickname: data.nickname } : prev));
   };
 
   return (
-    <UserContext.Provider value={{ user, login, logout, isLoading }}>
+    <UserContext.Provider value={{ user, login, register, logout, updateNickname, isLoading }}>
       {children}
     </UserContext.Provider>
   );

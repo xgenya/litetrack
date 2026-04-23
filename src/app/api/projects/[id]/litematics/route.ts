@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { addLitematic, getProject, canEditProject } from "@/lib/db";
 import { parseLitematic } from "@/lib/litematic-parser";
 import { getBlockDisplayName } from "@/lib/block-names";
+import { getSessionUser } from "@/lib/auth";
 
 export async function POST(
   request: NextRequest,
@@ -10,22 +11,22 @@ export async function POST(
   try {
     const { id } = await params;
 
+    const sessionUser = await getSessionUser(request);
+    if (!sessionUser) {
+      return NextResponse.json({ error: "请先登录" }, { status: 401 });
+    }
+
     const project = getProject(id);
     if (!project) {
       return NextResponse.json({ error: "项目不存在" }, { status: 404 });
     }
 
-    const formData = await request.formData();
-    const file = formData.get("file") as File;
-    const username = formData.get("username") as string;
-
-    if (!username) {
-      return NextResponse.json({ error: "请先登录" }, { status: 401 });
-    }
-
-    if (!canEditProject(id, username)) {
+    if (!canEditProject(id, sessionUser.displayUsername)) {
       return NextResponse.json({ error: "没有权限上传投影" }, { status: 403 });
     }
+
+    const formData = await request.formData();
+    const file = formData.get("file") as File;
 
     if (!file) {
       return NextResponse.json({ error: "没有上传文件" }, { status: 400 });

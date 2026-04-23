@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   Plus,
   FolderOpen,
@@ -19,6 +20,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TopBar } from "@/components/TopBar";
 import { useUser } from "@/lib/user-context";
 import { Project, ProjectStatus } from "@/lib/types";
+import { formatUser } from "@/lib/utils";
+import { McAvatar } from "@/components/McAvatar";
+import { AvatarStack } from "@/components/AvatarStack";
 
 const STATUS_CONFIG: Record<
   ProjectStatus,
@@ -40,37 +44,6 @@ const STATUS_CONFIG: Record<
     color: "text-blue-500 bg-blue-500/10",
   },
 };
-
-function AvatarStack({ usernames, max = 5 }: { usernames: string[]; max?: number }) {
-  const displayed = usernames.slice(0, max);
-  const remaining = usernames.length - max;
-
-  return (
-    <div className="flex -space-x-2">
-      {displayed.map((username, index) => (
-        <img
-          key={username}
-          src={`https://mc-heads.net/avatar/${username}/32`}
-          alt={username}
-          title={username}
-          className="w-6 h-6 rounded border-2 border-background block-icon"
-          style={{ zIndex: displayed.length - index }}
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = "https://mc-heads.net/avatar/MHF_Steve/32";
-          }}
-        />
-      ))}
-      {remaining > 0 && (
-        <div 
-          className="w-6 h-6 rounded-full border-2 border-background bg-muted flex items-center justify-center text-xs"
-          style={{ zIndex: 0 }}
-        >
-          +{remaining}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function Home() {
   const router = useRouter();
@@ -113,7 +86,6 @@ export default function Home() {
         body: JSON.stringify({
           name: newProjectName.trim(),
           description: newProjectDesc.trim(),
-          username: user.username,
         }),
       });
 
@@ -122,10 +94,11 @@ export default function Home() {
         router.push(`/project/${project.id}`);
       } else {
         const data = await res.json();
-        alert(data.error || "创建失败");
+        toast.error(data.error || "创建失败");
       }
     } catch (err) {
       console.error("Failed to create project:", err);
+      toast.error("创建失败，请重试");
     } finally {
       setCreating(false);
     }
@@ -149,14 +122,14 @@ export default function Home() {
       const res = await fetch(`/api/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, username: user.username }),
+        body: JSON.stringify({ status }),
       });
 
       if (res.ok) {
         fetchProjects();
       } else {
         const data = await res.json();
-        alert(data.error || "更新失败");
+        toast.error(data.error || "更新失败");
       }
     } catch (err) {
       console.error("Failed to update project:", err);
@@ -169,7 +142,7 @@ export default function Home() {
     if (!confirm("确定要删除这个项目吗？所有相关数据将被永久删除。")) return;
 
     try {
-      const res = await fetch(`/api/projects/${projectId}?username=${user.username}`, {
+      const res = await fetch(`/api/projects/${projectId}`, {
         method: "DELETE",
       });
 
@@ -177,7 +150,7 @@ export default function Home() {
         fetchProjects();
       } else {
         const data = await res.json();
-        alert(data.error || "删除失败");
+        toast.error(data.error || "删除失败");
       }
     } catch (err) {
       console.error("Failed to delete project:", err);
@@ -196,7 +169,6 @@ export default function Home() {
         body: JSON.stringify({
           name: editingProject.name,
           description: editingProject.description,
-          username: user.username,
         }),
       });
 
@@ -205,7 +177,7 @@ export default function Home() {
         setEditingProject(null);
       } else {
         const data = await res.json();
-        alert(data.error || "更新失败");
+        toast.error(data.error || "更新失败");
       }
     } catch (err) {
       console.error("Failed to update project:", err);
@@ -238,7 +210,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
-      <TopBar title="进行中的项目" />
+      <TopBar />
 
       <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -280,7 +252,7 @@ export default function Home() {
           <div className="text-center py-12 text-muted-foreground">加载中...</div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {user && (
+            {user?.isAdmin && (
               <Card
                 className="cursor-pointer hover:border-primary/50 transition-colors border-dashed flex items-center justify-center min-h-[200px]"
                 onClick={() => setShowCreateDialog(true)}
@@ -301,7 +273,6 @@ export default function Home() {
                   <p className="text-muted-foreground">
                     {statusFilter === "all" ? "还没有项目" : "没有符合条件的项目"}
                   </p>
-                  <p className="text-sm text-muted-foreground mt-2">登录后可创建项目</p>
                 </CardContent>
               </Card>
             ) : (
@@ -428,15 +399,12 @@ export default function Home() {
 
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
-                          <img
-                            src={`https://mc-heads.net/avatar/${project.owner}/32`}
-                            alt={project.owner}
+                          <McAvatar
+                            username={project.owner}
+                            size={32}
                             className="w-6 h-6 rounded block-icon"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = "https://mc-heads.net/avatar/MHF_Steve/32";
-                            }}
                           />
-                          <span className="text-sm">{project.owner}</span>
+                          <span className="text-sm">{formatUser(project.owner, project.ownerNickname)}</span>
                         </div>
                         {participants.length > 0 && (
                           <div className="flex items-center gap-2">

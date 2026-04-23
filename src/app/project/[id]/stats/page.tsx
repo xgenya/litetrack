@@ -2,9 +2,11 @@
 
 import { useState, useEffect, use } from "react";
 import { Project } from "@/lib/types";
+import { formatUser } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BlockIcon, BlockIconRaw } from "@/components/BlockIcon";
 import { TopBar } from "@/components/TopBar";
+import { McAvatar } from "@/components/McAvatar";
 import { Users, Trophy, Package, TrendingUp, Layers, Clock, FileBox, Box } from "lucide-react";
 import {
   PieChart,
@@ -34,6 +36,7 @@ const COLORS = [
 
 interface UserStats {
   username: string;
+  nickname: string;
   totalBoxes: number;
   claimCount: number;
   materials: { blockId: string; displayName: string; boxes: number }[];
@@ -90,6 +93,7 @@ export default function StatsPage({
     if (!userStatsMap[claim.username]) {
       userStatsMap[claim.username] = {
         username: claim.username,
+        nickname: claim.nickname,
         totalBoxes: 0,
         claimCount: 0,
         materials: [],
@@ -151,7 +155,7 @@ export default function StatsPage({
     .reverse()[0];
 
   const pieData = userStats.map((u) => ({
-    name: u.username,
+    name: formatUser(u.username, u.nickname),
     value: u.totalBoxes,
   }));
 
@@ -470,17 +474,13 @@ export default function StatsPage({
                         </span>
                       )}
                     </div>
-                    <img
-                      src={`https://mc-heads.net/avatar/${stats.username}/48`}
-                      alt={stats.username}
+                    <McAvatar
+                      username={stats.username}
+                      size={48}
                       className="w-12 h-12 rounded block-icon flex-shrink-0"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src =
-                          "https://mc-heads.net/avatar/MHF_Steve/48";
-                      }}
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold">{stats.username}</div>
+                      <div className="font-semibold">{formatUser(stats.username, stats.nickname)}</div>
                       <div className="text-sm text-muted-foreground">
                         认领 {stats.claimCount} 次，共 {stats.totalBoxes} 盒
                       </div>

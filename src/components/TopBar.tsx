@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef, ReactNode } from "react";
 import { LoginDialog } from "./LoginDialog";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { useUser } from "@/lib/user-context";
 
 interface TopBarProps {
   title?: string;
@@ -18,6 +20,8 @@ export function TopBar({
   backText = "返回",
   actions 
 }: TopBarProps) {
+  const { user } = useUser();
+  const pathname = usePathname();
   const [visible, setVisible] = useState(true);
   const lastScrollY = useRef(0);
 
@@ -46,7 +50,7 @@ export function TopBar({
         visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-full pointer-events-none"
       }`}
     >
-      <header className="bg-background/90 backdrop-blur-md border border-border/50 rounded-2xl px-8 py-2 shadow-lg shadow-black/5 min-w-[600px]">
+      <header className="bg-background/90 backdrop-blur-md border border-border/50 rounded-2xl px-4 sm:px-8 py-2 shadow-lg shadow-black/5 w-full max-w-4xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
             {backLink && (
@@ -64,6 +68,20 @@ export function TopBar({
             ) : (
               <Link href="/" className="font-semibold text-sm hover:text-primary transition-colors">
                 {title}
+              </Link>
+            )}
+
+            {user?.isAdmin && (
+              <Link
+                href="/admin"
+                className={`flex items-center gap-1.5 text-sm transition-colors ${
+                  pathname.startsWith("/admin")
+                    ? "text-amber-600 font-medium"
+                    : "text-amber-600 hover:text-amber-500"
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span className="hidden sm:inline">后台管理</span>
               </Link>
             )}
 

@@ -9,10 +9,12 @@ export interface Material {
 export interface Claim {
   id: string;
   username: string;
+  nickname: string;
   blockId: string;
   litematicId: string;
   boxes: number;
   createdAt: number;
+  collectedAt?: number | null;
 }
 
 export interface Litematic {
@@ -31,6 +33,7 @@ export type ProjectRole = "owner" | "admin" | "member";
 
 export interface ProjectMember {
   username: string;
+  nickname: string;
   role: ProjectRole;
   joinedAt: number;
 }
@@ -41,6 +44,7 @@ export interface Project {
   description: string;
   status: ProjectStatus;
   owner: string;
+  ownerNickname: string;
   members: ProjectMember[];
   litematics: Litematic[];
   claims: Claim[];
@@ -48,7 +52,11 @@ export interface Project {
   updatedAt: number;
 }
 
+export type SystemRole = "admin" | "user";
+
 export interface User {
   username: string;
+  nickname: string;
   avatarUrl: string;
+  isAdmin: boolean;
 }
