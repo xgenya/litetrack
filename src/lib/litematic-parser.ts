@@ -22,6 +22,7 @@ interface ParsedMaterial {
 class NBTReader {
   private data: DataView;
   private offset: number;
+  private decoder = new TextDecoder("utf-8");
 
   constructor(buffer: ArrayBuffer) {
     this.data = new DataView(buffer);
@@ -29,9 +30,7 @@ class NBTReader {
   }
 
   readByte(): number {
-    const value = this.data.getInt8(this.offset);
-    this.offset += 1;
-    return value;
+    return this.data.getInt8(this.offset++);
   }
 
   readShort(): number {
@@ -68,73 +67,61 @@ class NBTReader {
     const length = this.readShort();
     const bytes = new Uint8Array(this.data.buffer, this.offset, length);
     this.offset += length;
-    return new TextDecoder("utf-8").decode(bytes);
+    return this.decoder.decode(bytes);
   }
 
   readByteArray(): number[] {
     const length = this.readInt();
-    const arr: number[] = [];
-    for (let i = 0; i < length; i++) {
-      arr.push(this.readByte());
-    }
-    return arr;
+    const start = this.offset;
+    this.offset += length;
+    return Array.from(new Int8Array(this.data.buffer, start, length));
   }
 
   readIntArray(): number[] {
     const length = this.readInt();
-    const arr: number[] = [];
+    const arr = new Int32Array(length);
     for (let i = 0; i < length; i++) {
-      arr.push(this.readInt());
+      arr[i] = this.data.getInt32(this.offset, false);
+      this.offset += 4;
     }
-    return arr;
+    return Array.from(arr);
   }
 
   readLongArray(): bigint[] {
     const length = this.readInt();
-    const arr: bigint[] = [];
+    // Return a view-backed typed array for zero-copy reads
+    const arr: bigint[] = new Array(length);
     for (let i = 0; i < length; i++) {
-      arr.push(this.readLong());
+      arr[i] = this.data.getBigInt64(this.offset, false);
+      this.offset += 8;
     }
     return arr;
   }
 
   readTag(tagType: number): NBTValue {
     switch (tagType) {
-      case 1:
-        return this.readByte();
-      case 2:
-        return this.readShort();
-      case 3:
-        return this.readInt();
-      case 4:
-        return this.readLong();
-      case 5:
-        return this.readFloat();
-      case 6:
-        return this.readDouble();
-      case 7:
-        return this.readByteArray();
-      case 8:
-        return this.readString();
-      case 9:
-        return this.readList();
-      case 10:
-        return this.readCompound();
-      case 11:
-        return this.readIntArray();
-      case 12:
-        return this.readLongArray();
-      default:
-        throw new Error(`Unknown tag type: ${tagType}`);
+      case 1: return this.readByte();
+      case 2: return this.readShort();
+      case 3: return this.readInt();
+      case 4: return this.readLong();
+      case 5: return this.readFloat();
+      case 6: return this.readDouble();
+      case 7: return this.readByteArray();
+      case 8: return this.readString();
+      case 9: return this.readList();
+      case 10: return this.readCompound();
+      case 11: return this.readIntArray();
+      case 12: return this.readLongArray();
+      default: throw new Error(`Unknown tag type: ${tagType}`);
     }
   }
 
   readList(): NBTValue[] {
     const itemType = this.readByte();
     const length = this.readInt();
-    const list: NBTValue[] = [];
+    const list: NBTValue[] = new Array(length);
     for (let i = 0; i < length; i++) {
-      list.push(this.readTag(itemType));
+      list[i] = this.readTag(itemType);
     }
     return list;
   }
@@ -152,9 +139,7 @@ class NBTReader {
 
   readRoot(): NBTCompound {
     const tagType = this.readByte();
-    if (tagType !== 10) {
-      throw new Error("Root tag must be a compound");
-    }
+    if (tagType !== 10) throw new Error("Root tag must be a compound");
     this.readString();
     return this.readCompound();
   }
@@ -183,13 +168,11 @@ export function parseLitematic(buffer: ArrayBuffer): ParsedMaterial[] {
     const bitsPerEntry = Math.max(2, Math.ceil(Math.log2(paletteSize)));
     const maxEntryValue = BigInt((1 << bitsPerEntry) - 1);
 
-    const indices: number[] = [];
+    // Single-pass: decode palette index and count directly, no intermediate array
     let bitIndex = 0;
-
     for (let i = 0; i < totalBlocks; i++) {
-      const startOffset = bitIndex;
-      const startArrIdx = Math.floor(startOffset / 64);
-      const startBit = startOffset % 64;
+      const startArrIdx = Math.floor(bitIndex / 64);
+      const startBit = bitIndex % 64;
       const endBit = startBit + bitsPerEntry - 1;
 
       let val: bigint;
@@ -206,19 +189,13 @@ export function parseLitematic(buffer: ArrayBuffer): ParsedMaterial[] {
         val = lowVal | (highVal << BigInt(lowBits));
       }
 
-      indices.push(Number(val));
       bitIndex += bitsPerEntry;
-    }
 
-    for (const idx of indices.slice(0, totalBlocks)) {
+      const idx = Number(val);
       if (idx >= 0 && idx < paletteSize) {
-        const stateComp = palette[idx];
-        const blockName = stateComp["Name"] as string;
+        const blockName = palette[idx]["Name"] as string;
         if (blockName !== "minecraft:air") {
-          materialCounts.set(
-            blockName,
-            (materialCounts.get(blockName) || 0) + 1
-          );
+          materialCounts.set(blockName, (materialCounts.get(blockName) || 0) + 1);
         }
       }
     }
@@ -241,12 +218,8 @@ export function parseLitematic(buffer: ArrayBuffer): ParsedMaterial[] {
     materialCounts.delete("minecraft:lava");
   }
 
-  const result: ParsedMaterial[] = [];
-  for (const [blockId, count] of materialCounts) {
-    result.push({ blockId, count });
-  }
-
-  result.sort((a, b) => b.count - a.count);
-
-  return result;
+  return [...materialCounts.entries()]
+    .map(([blockId, count]) => ({ blockId, count }))
+    .sort((a, b) => b.count - a.count);
 }
+

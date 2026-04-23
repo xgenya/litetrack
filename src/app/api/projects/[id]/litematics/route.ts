@@ -4,6 +4,12 @@ import { parseLitematic } from "@/lib/litematic-parser";
 import { getBlockDisplayName } from "@/lib/block-names";
 import { getSessionUser } from "@/lib/auth";
 
+// Allow up to 60s for parsing large litematics
+export const maxDuration = 60;
+
+// Max upload size: 100MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -36,6 +42,13 @@ export async function POST(
       return NextResponse.json(
         { error: "请上传 .litematic 格式的文件" },
         { status: 400 }
+      );
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: `文件过大，最大支持 ${MAX_FILE_SIZE / 1024 / 1024}MB` },
+        { status: 413 }
       );
     }
 
