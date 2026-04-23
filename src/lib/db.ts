@@ -993,3 +993,37 @@ export function markClaimUncollected(claimId: string, username: string): boolean
   return result.changes > 0;
 }
 
+/**
+ * Read usernames from an uploaded EasyAuth SQLite file using ATTACH DATABASE,
+ * reusing the existing db connection to avoid a second native module instance.
+ * Returns the number of usernames added to the whitelist.
+ */
+export function importEasyAuthDbFile(tmpPath: string): { total: number; added: number } {
+  const database = getDb();
+
+  // Verify the easyauth table exists in the attached DB before importing
+  database.prepare("ATTACH DATABASE ? AS easyauth_import").run(tmpPath);
+  try {
+    const tableRow = database
+      .prepare("SELECT name FROM easyauth_import.sqlite_master WHERE type='table' AND name='easyauth'")
+      .get();
+    if (!tableRow) {
+      throw new Error("数据库中未找到 easyauth 表");
+    }
+
+    const rows = database
+      .prepare("SELECT DISTINCT username FROM easyauth_import.easyauth WHERE username IS NOT NULL AND username != ''")
+      .all() as Array<{ username: string }>;
+
+    const usernames = rows.map((r) => r.username);
+    if (usernames.length === 0) {
+      throw new Error("数据库中未找到有效用户名");
+    }
+
+    const added = bulkAddToWhitelist(usernames);
+    return { total: usernames.length, added };
+  } finally {
+    database.prepare("DETACH DATABASE easyauth_import").run();
+  }
+}
+

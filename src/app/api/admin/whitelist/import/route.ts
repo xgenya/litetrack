@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { bulkAddToWhitelist } from "@/lib/db";
+import { importEasyAuthDbFile } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { tmpdir } from "os";
 import { join } from "path";
 import { writeFile, unlink } from "fs/promises";
 import { randomBytes } from "crypto";
-import Database from "better-sqlite3";
 
 export const runtime = "nodejs";
 
@@ -48,34 +47,11 @@ export async function POST(request: NextRequest) {
 
   try {
     await writeFile(tmpPath, buffer);
-
-    const importDb = new Database(tmpPath, { readonly: true });
-
-    let usernames: string[];
-    try {
-      // Verify table exists
-      const tableRow = importDb
-        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='easyauth'")
-        .get();
-      if (!tableRow) {
-        return NextResponse.json({ error: "数据库中未找到 easyauth 表" }, { status: 422 });
-      }
-
-      const rows = importDb
-        .prepare("SELECT DISTINCT username FROM easyauth WHERE username IS NOT NULL AND username != ''")
-        .all() as Array<{ username: string }>;
-
-      usernames = rows.map((r) => r.username);
-    } finally {
-      importDb.close();
-    }
-
-    if (usernames.length === 0) {
-      return NextResponse.json({ error: "数据库中未找到有效用户名" }, { status: 422 });
-    }
-
-    const added = bulkAddToWhitelist(usernames);
-    return NextResponse.json({ success: true, total: usernames.length, added });
+    const { total, added } = importEasyAuthDbFile(tmpPath);
+    return NextResponse.json({ success: true, total, added });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "导入失败";
+    return NextResponse.json({ error: msg }, { status: 422 });
   } finally {
     await unlink(tmpPath).catch(() => {});
   }

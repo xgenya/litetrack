@@ -1,6 +1,7 @@
 services:
   litetrack:
     image: ghcr.io/xgenya/litetrack:latest
+    pull_policy: always
     container_name: litetrack
     restart: unless-stopped
     ports:

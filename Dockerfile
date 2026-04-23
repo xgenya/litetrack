@@ -25,8 +25,9 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# better-sqlite3 is a native module; standalone output may not include it fully.
-# Copy it explicitly from the deps stage to ensure the binary is present.
+# better-sqlite3 is a native module; copy it from deps (compiled with musl/alpine)
+# into both the top-level node_modules and the standalone bundle's node_modules
+# so that Next.js serverExternalPackages can resolve it correctly at runtime.
 COPY --from=deps /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=deps /app/node_modules/bindings ./node_modules/bindings
 COPY --from=deps /app/node_modules/file-uri-to-path ./node_modules/file-uri-to-path

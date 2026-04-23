@@ -1,81 +1,151 @@
-# LiteTrack
+<div align="center">
 
-**LiteTrack** 是一个基于 Next.js + SQLite 的 Minecraft Litematica 投影协作备货平台。
+# 🧱 LiteTrack
 
-团队成员可以认领材料、追踪收集进度，项目管理员可以管理投影、分配任务。
+**Minecraft 建筑材料协作追踪平台**
 
-## 功能特性
+上传 `.litematic` 投影文件，团队成员在线认领材料、追踪收集进度。
 
-- 📋 **项目管理** — 创建投影项目，管理多个 `.litematic` 文件
-- 👥 **协作认领** — 成员认领材料，实时查看收集进度
-- 📊 **数据可视化** — 材料完成情况图表
-- 🔐 **权限管理** — 管理员 / 普通用户，支持白名单注册
-- 🏷️ **昵称系统** — 自定义显示名，MC 皮肤头像
-- 🌙 **深色模式** — 完整 Dark Mode 支持
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Next.js](https://img.shields.io/badge/Next.js-16.2-black?logo=next.js)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)](https://sqlite.org)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://hub.docker.com)
 
-## 快速开始（Docker）
+</div>
 
-> 确保已安装 [Docker](https://docs.docker.com/get-docker/) 和 Docker Compose。
+---
 
-**一、获取配置文件**
+## ✨ 功能特性
+
+| 功能 | 描述 |
+|------|------|
+| 📦 **投影解析** | 上传 `.litematic` 文件，自动解析所有方块材料用量 |
+| 👥 **协作认领** | 按潜影盒为单位认领材料，防止重复收集 |
+| 📊 **实时统计** | 项目认领进度、收集完成度、排行榜与图表 |
+| 🗂️ **多投影支持** | 单项目支持多个 `.litematic` 文件，分 Tab 管理 |
+| 🔐 **白名单注册** | 仅白名单内的 MC 玩家名可注册，支持批量导入 EasyAuth 数据 |
+| 🛡️ **管理后台** | 用户管理、角色权限、密码重置 |
+| 🎨 **皮肤头像** | 自动获取 Minecraft 玩家头像 |
+| 🌙 **深色模式** | 跟随系统或手动切换 |
+| 📱 **移动端适配** | 全页面响应式布局 |
+
+---
+
+## 📸 截图
+
+<details>
+<summary>桌面端</summary>
+
+**项目列表**
+![项目列表](docs/screenshots/feature-projects.png)
+
+**材料认领**
+![材料认领](docs/screenshots/feature-collaboration.png)
+
+**统计图表**
+![统计图表](docs/screenshots/feature-charts.png)
+
+**管理后台**
+![管理后台](docs/screenshots/feature-admin-users.png)
+
+</details>
+
+<details>
+<summary>移动端</summary>
+
+**项目列表（移动端）**
+![移动端项目列表](docs/screenshots/mobile-projects.png)
+
+**材料认领（移动端）**
+![移动端认领](docs/screenshots/mobile-collaboration.png)
+
+**统计图表（移动端）**
+![移动端统计](docs/screenshots/mobile-charts.png)
+
+</details>
+
+---
+
+## 🚀 快速部署（Docker）
+
+> **前提：** 已安装 [Docker](https://docs.docker.com/get-docker/)
 
 ```bash
+# 1. 新建目录并下载配置文件
 mkdir litetrack && cd litetrack
-
 curl -O https://raw.githubusercontent.com/xgenya/litetrack/master/docker-compose.yml
 curl -O https://raw.githubusercontent.com/xgenya/litetrack/master/.env.example
 cp .env.example .env
-```
 
-**二、配置管理员**
+# 2. 编辑 .env，设置你的 MC 用户名为管理员
+#    ADMIN_USERNAMES=你的MC名
+nano .env
 
-编辑 `.env`，将 `your_username` 替换为你注册时使用的用户名（支持多个，逗号分隔）：
-
-```env
-ADMIN_USERNAMES=your_username
-```
-
-**三、启动服务**
-
-```bash
+# 3. 启动
 mkdir -p data
 docker compose up -d
 ```
 
-打开浏览器访问 **http://localhost:3000**，注册账号后即为管理员。
+访问 `http://localhost:3000`，用设置的 MC 用户名注册即可获得管理员权限。
 
-**四、更新镜像**
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-**五、停止服务**
+### 管理容器
 
 ```bash
+# 更新到最新版本
+docker compose pull && docker compose up -d
+
+# 查看日志
+docker logs litetrack
+
+# 停止
 docker compose down
 ```
 
-> **数据持久化**：SQLite 数据库保存在 `./data/litematic.db`，`.env` 通过 `env_file` 注入容器环境变量，重建容器数据不丢失。
+数据库文件保存在 `./data/litematic.db`。
 
-## 本地开发
+---
+
+## 🛠️ 本地开发
 
 ```bash
+# 安装依赖
 npm install
+
+# 配置环境变量
 cp .env.example .env
+
+# 启动开发服务器
 npm run dev
 ```
 
-## 环境变量
+访问 `http://localhost:3000`。
+
+---
+
+## ⚙️ 环境变量
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `ADMIN_USERNAMES` | — | 超级管理员用户名，逗号分隔 |
+| `ADMIN_USERNAMES` | —（无） | 预设管理员 MC 用户名，多个用逗号分隔 |
+| `COOKIE_SECURE` | `false` | Cookie Secure 标志；HTTPS 部署设为 `true` |
+| `DB_PATH` | `data/litematic.db` | SQLite 数据库文件路径 |
 
-## 技术栈
+---
 
-- [Next.js 15](https://nextjs.org/) · React 19
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3)
-- [Tailwind CSS](https://tailwindcss.com/) · [shadcn/ui](https://ui.shadcn.com/)
-- [Recharts](https://recharts.org/)
+## 🏗️ 技术栈
+
+- **框架：** [Next.js 16](https://nextjs.org) (App Router) + [React 19](https://react.dev)
+- **数据库：** [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (SQLite)
+- **样式：** [Tailwind CSS 4](https://tailwindcss.com) + [shadcn/ui](https://ui.shadcn.com)
+- **图表：** [Recharts](https://recharts.org)
+- **投影解析：** [nbt-ts](https://github.com/janispritzkau/nbt-ts) + [pako](https://github.com/nodeca/pako)
+- **材料图标：** [minecraft-textures](https://github.com/destruc7i0n/minecraft-textures)
+
+---
+
+## 📄 License
+
+本项目基于 [GNU General Public License v3.0](LICENSE) 开源。
