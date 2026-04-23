@@ -31,7 +31,9 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+.env
+# keep .env.example committed
+!.env.example
 
 # vercel
 .vercel
@@ -41,7 +43,7 @@ yarn-error.log*
 next-env.d.ts
 
 # data
-/data
+/data/*.db
 *.db
 *.db-wal
 *.db-shm
