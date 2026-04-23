@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { writeFile, unlink } from "fs/promises";
 import { randomBytes } from "crypto";
+import Database from "better-sqlite3";
 
 export const runtime = "nodejs";
 
@@ -48,8 +49,6 @@ export async function POST(request: NextRequest) {
   try {
     await writeFile(tmpPath, buffer);
 
-    // Dynamic import to avoid edge runtime issues
-    const Database = (await import("better-sqlite3")).default;
     const importDb = new Database(tmpPath, { readonly: true });
 
     let usernames: string[];
