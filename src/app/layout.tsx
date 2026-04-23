@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Litematica 备货平台",
-  description: "解析 Litematica 蓝图文件，生成材料清单",
+  title: "LiteTrack",
+  description: "Litematica 投影协作备货平台",
 };
 
 export default function RootLayout({

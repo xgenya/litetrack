@@ -623,7 +623,7 @@ export default function ProjectPage({
                   <div className="flex flex-col gap-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <CardTitle>材料清单</CardTitle>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                         <div className="flex gap-1">
                           {(["all", "unclaimed", "claimed"] as const).map((s) => {
                             const labels = { all: "全部", claimed: "已认领", unclaimed: "未认领" };

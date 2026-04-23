@@ -15,7 +15,7 @@ interface TopBarProps {
 }
 
 export function TopBar({ 
-  title = "Litematica 材料分析器", 
+  title = "LiteTrack", 
   backLink, 
   backText = "返回",
   actions 
