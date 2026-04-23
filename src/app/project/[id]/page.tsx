@@ -451,35 +451,29 @@ export default function ProjectPage({
                       return (
                         <div
                           key={litematic.id}
-                          className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30 transition-colors"
+                          className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/30 transition-colors"
                         >
-                          <div className="flex items-center gap-3">
-                            <FileBox className="w-5 h-5 text-muted-foreground" />
-                            <div>
-                              <div className="font-medium">{litematic.filename}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {litematic.totalTypes} 种材料 · {litematic.totalBlocks.toLocaleString()} 方块
-                              </div>
+                          <FileBox className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{litematic.filename}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {litematic.totalTypes} 种材料 · {litematic.totalBlocks.toLocaleString()} 方块
                             </div>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
-                              <div className="text-sm font-medium">
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <span className="text-sm font-medium tabular-nums">
                                 {litematicClaimedBoxes}/{litematicTotalBoxes} 盒
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {progress}% 完成
-                              </div>
+                              </span>
+                              <span className="text-xs text-muted-foreground">{progress}% 完成</span>
                             </div>
-                            {canEdit && (
-                              <button
-                                onClick={() => handleDeleteLitematic(litematic.id)}
-                                className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
                           </div>
+                          {canEdit && (
+                            <button
+                              onClick={() => handleDeleteLitematic(litematic.id)}
+                              className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors flex-shrink-0"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       );
                     })}

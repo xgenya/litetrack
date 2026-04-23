@@ -341,7 +341,73 @@ export default function AdminPage() {
           ) : section === "users" ? (
             /* ── Users ─────────────────────────────────────────────────────── */
             <div className="border rounded-xl overflow-hidden">
-              <table className="w-full">
+              {/* Mobile: card layout */}
+              <div className="md:hidden divide-y">
+                {users.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-muted-foreground text-sm">暂无用户</p>
+                ) : (
+                  users.map((u) => (
+                    <div key={u.username} className="p-4 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <McAvatar username={u.displayUsername} size={32} className="w-8 h-8 rounded flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm truncate">{u.displayUsername}</p>
+                            <p className="text-xs text-muted-foreground truncate">{u.username}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                          {u.isAdmin && (
+                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600">
+                              <ShieldCheck className="w-3 h-3" />
+                              {u.isConfigAdmin ? "超级管理员" : "管理员"}
+                            </span>
+                          )}
+                          <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${!u.isActive ? "bg-red-500/10 text-red-500" : "bg-green-500/10 text-green-600"}`}>
+                            {!u.isActive ? (<><ShieldOff className="w-3 h-3" /> 已禁用</>) : "正常"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">{new Date(u.createdAt).toLocaleDateString("zh-CN")}</span>
+                        <div className="flex items-center gap-1.5">
+                          {u.username !== user!.username.toLowerCase() && !u.isConfigAdmin && u.isActive && (
+                            <button
+                              onClick={() => handleToggleAdmin(u.username, u.displayUsername, !u.isAdmin)}
+                              disabled={togglingAdminFor === u.username}
+                              className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-amber-500/30 text-amber-600 hover:bg-amber-500/10 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                              {u.isAdmin ? "移除管理员" : "设为管理员"}
+                            </button>
+                          )}
+                          {u.username !== user!.username.toLowerCase() && (
+                            u.isActive ? (
+                              <button
+                                onClick={() => handleDeactivateUser(u.username, u.displayUsername)}
+                                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-destructive/30 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                              >
+                                <ShieldOff className="w-3.5 h-3.5" />
+                                禁用
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleReactivateUser(u.username, u.displayUsername)}
+                                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-green-500/30 text-green-600 hover:bg-green-500/10 rounded-lg transition-colors"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                                启用
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              {/* Desktop: table layout */}
+              <table className="hidden md:table w-full">
                 <thead>
                   <tr className="border-b bg-muted/30 text-left">
                     <th className="px-4 py-3 text-sm font-medium">用户</th>
@@ -404,7 +470,6 @@ export default function AdminPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1.5">
-                            {/* Role toggle: hide for config admins and self */}
                             {u.username !== user!.username.toLowerCase() && !u.isConfigAdmin && u.isActive && (
                               <button
                                 onClick={() => handleToggleAdmin(u.username, u.displayUsername, !u.isAdmin)}
@@ -445,7 +510,46 @@ export default function AdminPage() {
           ) : section === "projects" ? (
             /* ── Projects ───────────────────────────────────────────────────── */
             <div className="border rounded-xl overflow-hidden">
-              <table className="w-full">
+              {/* Mobile: card layout */}
+              <div className="md:hidden divide-y">
+                {projects.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-muted-foreground text-sm">暂无项目</p>
+                ) : (
+                  projects.map((p) => (
+                    <div key={p.id} className="p-4 space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <a
+                            href={`/project/${p.id}`}
+                            className="font-medium text-sm hover:text-primary transition-colors truncate block"
+                          >
+                            {p.name}
+                          </a>
+                          {p.description && (
+                            <p className="text-xs text-muted-foreground truncate">{p.description}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleDeleteProject(p.id, p.name)}
+                          className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-destructive/30 text-destructive hover:bg-destructive/10 rounded-lg transition-colors flex-shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          删除
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                        <span>{p.owner}</span>
+                        <span>·</span>
+                        <span>{STATUS_LABELS[p.status]}</span>
+                        <span>·</span>
+                        <span>{p.members.length} 人</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              {/* Desktop: table layout */}
+              <table className="hidden md:table w-full">
                 <thead>
                   <tr className="border-b bg-muted/30 text-left">
                     <th className="px-4 py-3 text-sm font-medium">项目</th>
