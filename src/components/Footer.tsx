@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export function Footer() {
   return (
-    <footer className="mt-auto border-t bg-background py-4 text-center text-xs text-muted-foreground">
+    <footer className="fixed bottom-0 left-0 right-0 z-10 border-t bg-background/95 backdrop-blur-sm py-3 text-center text-xs text-muted-foreground">
       <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
         <span>© {new Date().getFullYear()} LiteTrack</span>
         <span className="hidden sm:inline text-border">|</span>

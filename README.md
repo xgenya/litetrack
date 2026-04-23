@@ -36,14 +36,12 @@
 
 ## 📸 截图
 
-<details>
-<summary>桌面端</summary>
-
-**项目列表**
 ![项目列表](docs/screenshots/feature-projects.png)
 
-**材料认领**
 ![材料认领](docs/screenshots/feature-collaboration.png)
+
+<details>
+<summary>更多截图</summary>
 
 **统计图表**
 ![统计图表](docs/screenshots/feature-charts.png)
@@ -51,18 +49,13 @@
 **管理后台**
 ![管理后台](docs/screenshots/feature-admin-users.png)
 
-</details>
-
-<details>
-<summary>移动端</summary>
-
-**项目列表（移动端）**
+**移动端项目列表**
 ![移动端项目列表](docs/screenshots/mobile-projects.png)
 
-**材料认领（移动端）**
+**移动端材料认领**
 ![移动端认领](docs/screenshots/mobile-collaboration.png)
 
-**统计图表（移动端）**
+**移动端统计图表**
 ![移动端统计](docs/screenshots/mobile-charts.png)
 
 </details>
