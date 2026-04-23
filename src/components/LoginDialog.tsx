@@ -3,12 +3,12 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useUser } from "@/lib/user-context";
-import { LogIn, LogOut, User, Eye, EyeOff } from "lucide-react";
+import { LogIn, User, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { McAvatar } from "./McAvatar";
 
 export function LoginDialog() {
-  const { user, login, register, logout, isLoading } = useUser();
+  const { user, login, register, isLoading } = useUser();
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
@@ -74,23 +74,14 @@ export function LoginDialog() {
     const displayName = user.nickname || user.username;
 
     return (
-      <div className="flex items-center gap-2">
-        <Link href="/me" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <McAvatar
-            username={user.username}
-            size={64}
-            className="w-7 h-7 rounded block-icon"
-          />
-          <span className="text-sm font-medium hidden sm:inline">{displayName}</span>
-        </Link>
-        <button
-          onClick={() => logout()}
-          className="p-1.5 hover:bg-muted rounded-lg transition-colors"
-          title="退出登录"
-        >
-          <LogOut className="w-4 h-4 text-muted-foreground" />
-        </button>
-      </div>
+      <Link href="/me" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+        <McAvatar
+          username={user.username}
+          size={64}
+          className="w-7 h-7 rounded block-icon"
+        />
+        <span className="text-sm font-medium hidden sm:inline">{displayName}</span>
+      </Link>
     );
   }
 

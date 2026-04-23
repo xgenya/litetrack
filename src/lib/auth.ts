@@ -52,7 +52,8 @@ const COOKIE_NAME = "session";
 const COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days in seconds
 
 export function buildSessionCookie(token: string): string {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  const useSecure = process.env.COOKIE_SECURE !== "false" && process.env.NODE_ENV === "production";
+  const secure = useSecure ? "; Secure" : "";
   return `${COOKIE_NAME}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${COOKIE_MAX_AGE}${secure}`;
 }
 

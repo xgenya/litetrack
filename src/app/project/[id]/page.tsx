@@ -460,8 +460,9 @@ export default function ProjectPage({
                               {litematic.totalTypes} 种材料 · {litematic.totalBlocks.toLocaleString()} 方块
                             </div>
                             <div className="flex items-center gap-2 mt-1.5">
-                              <span className="text-sm font-medium tabular-nums">
-                                {litematicClaimedBoxes}/{litematicTotalBoxes} 盒
+                              <span className="text-sm font-medium tabular-nums flex items-center gap-0.5">
+                                {litematicClaimedBoxes}/{litematicTotalBoxes}
+                                <BlockIconRaw blockId="minecraft:shulker_box" size={14} />
                               </span>
                               <span className="text-xs text-muted-foreground">{progress}% 完成</span>
                             </div>
@@ -517,8 +518,9 @@ export default function ProjectPage({
                                     <span className="font-medium">
                                       {material?.displayName || claim.blockId}
                                     </span>
-                                    <span className="text-muted-foreground ml-2">
-                                      x {claim.boxes} 盒
+                                    <span className="text-muted-foreground ml-2 flex items-center gap-0.5">
+                                      x {claim.boxes}
+                                      <BlockIconRaw blockId="minecraft:shulker_box" size={14} />
                                     </span>
                                   </div>
                                 </div>
@@ -671,17 +673,18 @@ export default function ProjectPage({
                 <CardContent>
                   {filteredLitematics.length > 1 ? (
                     <Tabs defaultValue={filteredLitematics[0]?.id}>
-                      <div className="flex items-center justify-between mb-4">
-                        <TabsList className="w-full justify-start overflow-x-auto">
-                          {filteredLitematics.map((litematic) => (
-                            <TabsTrigger key={litematic.id} value={litematic.id} className="gap-1.5 shrink-0">
-                              <FileBox className="w-3.5 h-3.5" />
-                              <span>{litematic.filename}</span>
-                              <span className="text-xs text-muted-foreground">({litematic.totalTypes})</span>
+                      <TabsList className="w-full justify-start mb-4 h-auto flex-wrap gap-1">
+                        {filteredLitematics.map((litematic) => {
+                          const name = litematic.filename.replace(/\.litematic$/i, "");
+                          const label = name.length > 10 ? name.slice(0, 10) + "…" : name;
+                          return (
+                            <TabsTrigger key={litematic.id} value={litematic.id} className="gap-1 shrink-0 text-xs" title={litematic.filename}>
+                              <FileBox className="w-3 h-3" />
+                              {label}
                             </TabsTrigger>
-                          ))}
-                        </TabsList>
-                      </div>
+                          );
+                        })}
+                      </TabsList>
                       {filteredLitematics.map((litematic) => (
                         <TabsContent key={litematic.id} value={litematic.id}>
                           <MaterialTable

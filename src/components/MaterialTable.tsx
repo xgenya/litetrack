@@ -65,7 +65,7 @@ function ClaimButton({
   done: boolean;
   onClaim: () => void;
 }) {
-  if (done) return <span className="text-xs text-muted-foreground">已满</span>;
+  if (done) return <span className="text-xs text-muted-foreground">已认领</span>;
   return (
     <button
       onClick={onClaim}

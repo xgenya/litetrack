@@ -302,7 +302,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <TopBar title="后台管理" backLink="/" backText="返回首页" />
+      <TopBar title="后台管理" />
 
       <div className="flex flex-1 max-w-6xl w-full mx-auto p-4 md:p-8 gap-6 flex-col md:flex-row">
         {/* Sidebar: horizontal tabs on mobile, vertical on desktop */}
@@ -742,7 +742,30 @@ export default function AdminPage() {
                   return (
                     <>
                       <div className="border rounded-lg overflow-hidden">
-                        <table className="w-full">
+                        {/* Mobile cards */}
+                        <div className="md:hidden divide-y">
+                          {pageEntries.map((entry) => (
+                            <div key={entry.username} className="flex items-center justify-between px-4 py-3 gap-3">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <McAvatar username={entry.username} size={24} className="w-6 h-6 rounded flex-shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{entry.username}</p>
+                                  <p className="text-xs text-muted-foreground">{new Date(entry.addedAt).toLocaleDateString("zh-CN")}</p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => deletingUsername !== entry.username && handleRemoveFromWhitelist(entry.username)}
+                                disabled={deletingUsername === entry.username}
+                                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-destructive/30 text-destructive hover:bg-destructive/10 rounded-lg transition-colors disabled:opacity-40 flex-shrink-0"
+                              >
+                                <X className="w-3 h-3" />
+                                {deletingUsername === entry.username ? "移除中..." : "移除"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Desktop table */}
+                        <table className="w-full hidden md:table">
                           <thead>
                             <tr className="border-b bg-muted/30 text-left">
                               <th className="px-4 py-2.5 text-xs font-medium">用户名</th>
@@ -755,11 +778,7 @@ export default function AdminPage() {
                               <tr key={entry.username} className="border-b last:border-0 hover:bg-muted/20">
                                 <td className="px-4 py-2.5">
                                   <div className="flex items-center gap-2.5">
-                                    <McAvatar
-                                      username={entry.username}
-                                      size={24}
-                                      className="w-6 h-6 rounded flex-shrink-0"
-                                    />
+                                    <McAvatar username={entry.username} size={24} className="w-6 h-6 rounded flex-shrink-0" />
                                     <span className="text-sm">{entry.username}</span>
                                   </div>
                                 </td>
@@ -768,10 +787,7 @@ export default function AdminPage() {
                                 </td>
                                 <td className="px-4 py-2.5 text-right">
                                   <button
-                                    onClick={() =>
-                                      deletingUsername !== entry.username &&
-                                      handleRemoveFromWhitelist(entry.username)
-                                    }
+                                    onClick={() => deletingUsername !== entry.username && handleRemoveFromWhitelist(entry.username)}
                                     disabled={deletingUsername === entry.username}
                                     className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-destructive/30 text-destructive hover:bg-destructive/10 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                   >

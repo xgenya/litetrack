@@ -195,7 +195,11 @@ export default function Home() {
       0
     );
     const claimedBoxes = project.claims.reduce((sum, c) => sum + c.boxes, 0);
-    return { totalBoxes, claimedBoxes };
+    const collectedBoxes = project.claims.reduce(
+      (sum, c) => sum + (c.collectedAt != null ? c.boxes : 0),
+      0
+    );
+    return { totalBoxes, claimedBoxes, collectedBoxes };
   };
 
   const getParticipants = (project: Project) => {
@@ -213,14 +217,23 @@ export default function Home() {
       <TopBar />
 
       <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <h1 className="text-2xl font-bold">项目列表</h1>
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-2xl font-bold shrink-0">项目列表</h1>
+          {user?.isAdmin && (
+            <button
+              onClick={() => setShowCreateDialog(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              创建项目
+            </button>
+          )}
         </div>
 
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap">
           <button
             onClick={() => setStatusFilter("all")}
-            className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+            className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
               statusFilter === "all"
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted hover:bg-muted/80"
@@ -235,7 +248,7 @@ export default function Home() {
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
-                className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-md text-xs transition-colors flex items-center gap-1 ${
                   statusFilter === status
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted hover:bg-muted/80"
@@ -252,20 +265,6 @@ export default function Home() {
           <div className="text-center py-12 text-muted-foreground">加载中...</div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {user?.isAdmin && (
-              <Card
-                className="cursor-pointer hover:border-primary/50 transition-colors border-dashed flex items-center justify-center min-h-[200px]"
-                onClick={() => setShowCreateDialog(true)}
-              >
-                <CardContent className="flex flex-col items-center gap-3 py-8">
-                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                    <Plus className="w-6 h-6 text-muted-foreground" />
-                  </div>
-                  <span className="text-muted-foreground font-medium">创建新项目</span>
-                </CardContent>
-              </Card>
-            )}
-
             {filteredProjects.length === 0 && !user ? (
               <Card className="col-span-full">
                 <CardContent className="py-12 text-center">
@@ -281,6 +280,10 @@ export default function Home() {
                 const progress =
                   stats.totalBoxes > 0
                     ? Math.round((stats.claimedBoxes / stats.totalBoxes) * 100)
+                    : 0;
+                const collectProgress =
+                  stats.claimedBoxes > 0
+                    ? Math.round((stats.collectedBoxes / stats.claimedBoxes) * 100)
                     : 0;
                 const config = STATUS_CONFIG[project.status];
                 const participants = getParticipants(project);
@@ -414,30 +417,38 @@ export default function Home() {
                         )}
                       </div>
 
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">认领进度</span>
-                          <span>
-                            {stats.claimedBoxes}/{stats.totalBoxes} 盒 ({progress}%)
-                          </span>
+                      <div className="space-y-2">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">认领进度</span>
+                            <span className="tabular-nums">{progress}%</span>
+                          </div>
+                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full transition-all"
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
+                        {stats.claimedBoxes > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">收集完成</span>
+                              <span className="tabular-nums">{collectProgress}%</span>
+                            </div>
+                            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-green-500 rounded-full transition-all"
+                                style={{ width: `${collectProgress}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          <span>创建于 {new Date(project.createdAt).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          <span>{new Date(project.updatedAt).toLocaleDateString()}</span>
-                        </div>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground pt-1">
+                        <Calendar className="w-3 h-3" />
+                        <span>创建于 {new Date(project.createdAt).toLocaleDateString()}</span>
                       </div>
                     </CardContent>
                   </Card>
