@@ -755,6 +755,14 @@ export function updateNickname(username: string, nickname: string): boolean {
   return result.changes > 0;
 }
 
+export function resetUserPassword(username: string, passwordHash: string): boolean {
+  const database = getDb();
+  const result = database
+    .prepare("UPDATE users SET password_hash = ? WHERE username = ?")
+    .run(passwordHash, username.toLowerCase());
+  return result.changes > 0;
+}
+
 export function userExists(username: string): boolean {
   const database = getDb();
   const row = database

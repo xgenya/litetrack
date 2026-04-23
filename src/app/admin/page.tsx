@@ -17,6 +17,7 @@ import {
   Plus,
   Upload,
   X,
+  KeyRound,
 } from "lucide-react";
 import { Project, ProjectStatus } from "@/lib/types";
 
@@ -60,6 +61,7 @@ export default function AdminPage() {
   const [loadingData, setLoadingData] = useState(true);
   const [actionMsg, setActionMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [togglingAdminFor, setTogglingAdminFor] = useState<string | null>(null);
+  const [resettingPasswordFor, setResettingPasswordFor] = useState<string | null>(null);
 
   // Per-action pending states
   const [togglingWhitelist, setTogglingWhitelist] = useState(false);
@@ -160,6 +162,26 @@ export default function AdminPage() {
   };
 
   // ── Project management ─────────────────────────────────────────────────────
+
+  const handleResetPassword = async (username: string, displayUsername: string) => {
+    if (!confirm(`确定要将 "${displayUsername}" 的密码重置为 123456 吗？该用户当前所有会话将被注销。`)) return;
+    setResettingPasswordFor(username);
+    try {
+      const res = await fetch(`/api/admin/users/${username}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resetPassword: true }),
+      });
+      if (res.ok) {
+        showMsg("ok", `${displayUsername} 的密码已重置为 123456`);
+      } else {
+        const data = await res.json();
+        showMsg("err", data.error || "重置失败");
+      }
+    } finally {
+      setResettingPasswordFor(null);
+    }
+  };
 
   const handleDeleteProject = async (projectId: string, projectName: string) => {
     if (!confirm(`确定要删除项目 "${projectName}" 吗？所有相关数据将被永久删除。`)) return;
@@ -371,6 +393,16 @@ export default function AdminPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-muted-foreground">{new Date(u.createdAt).toLocaleDateString("zh-CN")}</span>
                         <div className="flex items-center gap-1.5">
+                          {u.username !== user!.username.toLowerCase() && (
+                            <button
+                              onClick={() => handleResetPassword(u.username, u.displayUsername)}
+                              disabled={resettingPasswordFor === u.username}
+                              className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-border text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                              重置密码
+                            </button>
+                          )}
                           {u.username !== user!.username.toLowerCase() && !u.isConfigAdmin && u.isActive && (
                             <button
                               onClick={() => handleToggleAdmin(u.username, u.displayUsername, !u.isAdmin)}
@@ -470,6 +502,16 @@ export default function AdminPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1.5">
+                            {u.username !== user!.username.toLowerCase() && (
+                              <button
+                                onClick={() => handleResetPassword(u.username, u.displayUsername)}
+                                disabled={resettingPasswordFor === u.username}
+                                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-border text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <KeyRound className="w-3.5 h-3.5" />
+                                重置密码
+                              </button>
+                            )}
                             {u.username !== user!.username.toLowerCase() && !u.isConfigAdmin && u.isActive && (
                               <button
                                 onClick={() => handleToggleAdmin(u.username, u.displayUsername, !u.isAdmin)}

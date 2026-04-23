@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deactivateUser, deleteUserSessions, setUserAdmin, reactivateUser } from "@/lib/db";
-import { getSessionUser, isAdminUsername } from "@/lib/auth";
+import { deactivateUser, deleteUserSessions, setUserAdmin, reactivateUser, resetUserPassword } from "@/lib/db";
+import { getSessionUser, isAdminUsername, hashPassword } from "@/lib/auth";
+
+const RESET_PASSWORD = "123456";
 
 export async function DELETE(
   request: NextRequest,
@@ -38,6 +40,16 @@ export async function PATCH(
 
   const { username } = await params;
   const body = await request.json();
+
+  // Reset password
+  if ("resetPassword" in body && body.resetPassword === true) {
+    const passwordHash = await hashPassword(RESET_PASSWORD);
+    deleteUserSessions(username);
+    const success = resetUserPassword(username, passwordHash);
+    return success
+      ? NextResponse.json({ success: true })
+      : NextResponse.json({ error: "用户不存在" }, { status: 404 });
+  }
 
   // Re-enable user
   if ("isActive" in body) {
