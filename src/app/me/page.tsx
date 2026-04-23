@@ -5,7 +5,7 @@ import { useUser } from "@/lib/user-context";
 import { TopBar } from "@/components/TopBar";
 import { BlockIcon } from "@/components/BlockIcon";
 import { McAvatar } from "@/components/McAvatar";
-import { Check, Package, ChevronDown, ChevronRight } from "lucide-react";
+import { Check, Package, ChevronDown, ChevronRight, Eye, EyeOff, KeyRound } from "lucide-react";
 import Link from "next/link";
 
 interface ClaimDetail {
@@ -80,6 +80,16 @@ export default function MePage() {
   const [nicknameSaving, setNicknameSaving] = useState(false);
   const [nicknameMsg, setNicknameMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // Change password state
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [showOld, setShowOld] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirmNew, setShowConfirmNew] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   // Claims state
   const [claims, setClaims] = useState<ClaimDetail[]>([]);
   const [claimsLoading, setClaimsLoading] = useState(true);
@@ -116,8 +126,41 @@ export default function MePage() {
     }
   };
 
-  const toggleCollected = async (claimId: string, currentCollected: boolean) => {
-    setToggling(claimId);
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmNewPassword) {
+      setPasswordMsg({ ok: false, text: "两次输入的新密码不一致" });
+      return;
+    }
+    setPasswordSaving(true);
+    setPasswordMsg(null);
+    try {
+      const res = await fetch("/api/user/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setOldPassword("");
+        setNewPassword("");
+        setConfirmNewPassword("");
+        setShowOld(false);
+        setShowNew(false);
+        setShowConfirmNew(false);
+        setPasswordMsg({ ok: true, text: "密码已修改" });
+      } else {
+        setPasswordMsg({ ok: false, text: data.error || "修改失败" });
+      }
+    } catch {
+      setPasswordMsg({ ok: false, text: "网络错误" });
+    } finally {
+      setPasswordSaving(false);
+      setTimeout(() => setPasswordMsg(null), 4000);
+    }
+  };
+
+  const toggleCollected = async (claimId: string, currentCollected: boolean) => {    setToggling(claimId);
     try {
       const res = await fetch(`/api/user/claims/${claimId}`, {
         method: "PATCH",
@@ -211,6 +254,49 @@ export default function MePage() {
               </form>
             </div>
           </div>
+        </div>
+
+        {/* Change Password Section */}
+        <div className="border rounded-xl p-5 bg-card">
+          <h2 className="font-semibold text-base flex items-center gap-2 mb-4">
+            <KeyRound className="w-4 h-4" />
+            修改密码
+          </h2>
+          <form onSubmit={handlePasswordChange} className="space-y-3">
+            {[
+              { label: "原密码", value: oldPassword, setter: setOldPassword, show: showOld, toggleShow: () => setShowOld(v => !v) },
+              { label: "新密码", value: newPassword, setter: setNewPassword, show: showNew, toggleShow: () => setShowNew(v => !v) },
+              { label: "确认新密码", value: confirmNewPassword, setter: setConfirmNewPassword, show: showConfirmNew, toggleShow: () => setShowConfirmNew(v => !v) },
+            ].map(({ label, value, setter, show, toggleShow }) => (
+              <div key={label}>
+                <label className="block text-sm text-muted-foreground mb-1">{label}</label>
+                <div className="flex items-center border rounded-lg focus-within:ring-2 focus-within:ring-ring bg-background">
+                  <input
+                    type={show ? "text" : "password"}
+                    value={value}
+                    onChange={e => setter(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-transparent border-0 rounded-none text-sm focus:outline-none focus:ring-0"
+                    required
+                  />
+                  <button type="button" onClick={toggleShow} className="px-3 text-muted-foreground hover:text-foreground">
+                    {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {passwordMsg && (
+              <p className={`text-sm ${passwordMsg.ok ? "text-green-600" : "text-destructive"}`}>
+                {passwordMsg.text}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={passwordSaving || !oldPassword || !newPassword || !confirmNewPassword}
+              className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {passwordSaving ? "修改中…" : "修改密码"}
+            </button>
+          </form>
         </div>
 
         {/* Claims Section */}
