@@ -1048,3 +1048,28 @@ export function refreshAllDisplayNames(): number {
 
   return rows.length;
 }
+
+export function refreshProjectDisplayNames(projectId: string): number {
+  const database = getDb();
+  const rows = database
+    .prepare(
+      `SELECT DISTINCT m.block_id FROM materials m
+       JOIN litematics l ON m.litematic_id = l.id
+       WHERE l.project_id = ?`
+    )
+    .all(projectId) as { block_id: string }[];
+
+  const update = database.prepare(
+    `UPDATE materials SET display_name = ?
+     WHERE block_id = ?
+     AND litematic_id IN (SELECT id FROM litematics WHERE project_id = ?)`
+  );
+
+  database.transaction(() => {
+    for (const { block_id } of rows) {
+      update.run(getBlockDisplayName(block_id), block_id, projectId);
+    }
+  })();
+
+  return rows.length;
+}

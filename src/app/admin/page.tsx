@@ -80,7 +80,7 @@ function AdminPageContent() {
   const [deletingUsername, setDeletingUsername] = useState<string | null>(null);
   const [wlMsg, setWlMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [wlPage, setWlPage] = useState(1);
-  const [refreshingNames, setRefreshingNames] = useState(false);
+  const [refreshingNamesFor, setRefreshingNamesFor] = useState<string | null>(null);
   const WL_PAGE_SIZE = 10;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -205,10 +205,14 @@ function AdminPageContent() {
     }
   };
 
-  const handleRefreshNames = async () => {
-    setRefreshingNames(true);
+  const handleRefreshNames = async (projectId: string) => {
+    setRefreshingNamesFor(projectId);
     try {
-      const res = await fetch("/api/admin/refresh-names", { method: "POST" });
+      const res = await fetch("/api/admin/refresh-names", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId }),
+      });
       if (res.ok) {
         const { updated } = await res.json();
         showMsg("ok", `已刷新 ${updated} 种方块的显示名称`);
@@ -218,7 +222,7 @@ function AdminPageContent() {
     } catch {
       showMsg("err", "刷新失败");
     } finally {
-      setRefreshingNames(false);
+      setRefreshingNamesFor(null);
     }
   };
 
@@ -363,16 +367,6 @@ function AdminPageContent() {
               </h1>
             </div>
             <div className="flex items-center gap-2">
-              {section === "projects" && (
-                <button
-                  onClick={handleRefreshNames}
-                  disabled={refreshingNames}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${refreshingNames ? "animate-spin" : ""}`} />
-                  刷新显示名称
-                </button>
-              )}
               <button
                 onClick={fetchData}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-lg hover:bg-muted transition-colors"
@@ -612,6 +606,14 @@ function AdminPageContent() {
                           )}
                         </div>
                         <button
+                          onClick={() => handleRefreshNames(p.id)}
+                          disabled={refreshingNamesFor === p.id}
+                          className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-border text-muted-foreground hover:bg-muted rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${refreshingNamesFor === p.id ? "animate-spin" : ""}`} />
+                          刷新名称
+                        </button>
+                        <button
                           onClick={() => handleDeleteProject(p.id, p.name)}
                           className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-destructive/30 text-destructive hover:bg-destructive/10 rounded-lg transition-colors flex-shrink-0"
                         >
@@ -674,13 +676,23 @@ function AdminPageContent() {
                           {p.members.length} 人
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => handleDeleteProject(p.id, p.name)}
-                            className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-destructive/30 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            删除
-                          </button>
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleRefreshNames(p.id)}
+                              disabled={refreshingNamesFor === p.id}
+                              className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-border text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${refreshingNamesFor === p.id ? "animate-spin" : ""}`} />
+                              刷新名称
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProject(p.id, p.name)}
+                              className="inline-flex items-center gap-1 text-xs px-2.5 py-1 border border-destructive/30 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              删除
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
