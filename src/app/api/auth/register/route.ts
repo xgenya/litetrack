@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     createUser(trimmedUsername, passwordHash);
     const token = createSession(trimmedUsername);
 
-    const avatarUrl = `https://mc-heads.net/avatar/${trimmedUsername}/64`;
+    const avatarUrl = `/api/avatar?username=${encodeURIComponent(trimmedUsername)}&size=64`;
     const isAdmin = isAdminUsername(trimmedUsername);
 
     const response = NextResponse.json({

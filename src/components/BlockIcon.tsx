@@ -24,7 +24,7 @@ async function loadTextures(): Promise<TexturesJson> {
   if (texturesCache) return texturesCache;
   if (loadingPromise) return loadingPromise;
 
-  loadingPromise = import("minecraft-textures/dist/textures/json/1.21.id.json").then(
+  loadingPromise = import("minecraft-textures/dist/textures/json/26.1.id.json").then(
     (module) => {
       texturesCache = module.default as TexturesJson;
       return texturesCache;

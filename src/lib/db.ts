@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { join } from "path";
 import { Project, Litematic, Material, Claim, ProjectStatus, ProjectMember, ProjectRole } from "./types";
+import { getBlockDisplayName } from "./block-names";
 
 export interface UserRecord {
   username: string;
@@ -1027,3 +1028,23 @@ export function importEasyAuthDbFile(tmpPath: string): { total: number; added: n
   }
 }
 
+
+
+export function refreshAllDisplayNames(): number {
+  const database = getDb();
+  const rows = database
+    .prepare("SELECT DISTINCT block_id FROM materials")
+    .all() as { block_id: string }[];
+
+  const update = database.prepare(
+    "UPDATE materials SET display_name = ? WHERE block_id = ?"
+  );
+
+  database.transaction(() => {
+    for (const { block_id } of rows) {
+      update.run(getBlockDisplayName(block_id), block_id);
+    }
+  })();
+
+  return rows.length;
+}

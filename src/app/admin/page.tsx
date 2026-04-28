@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@/lib/user-context";
 import { TopBar } from "@/components/TopBar";
 import { McAvatar } from "@/components/McAvatar";
@@ -50,10 +50,19 @@ const NAV_ITEMS: { key: Section; label: string; icon: React.ReactNode }[] = [
 ];
 
 export default function AdminPage() {
+  return (
+    <Suspense>
+      <AdminPageContent />
+    </Suspense>
+  );
+}
+
+function AdminPageContent() {
   const { user, isLoading } = useUser();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [section, setSection] = useState<Section>("config");
+  const section = (searchParams.get("tab") as Section | null) ?? "config";
   const [users, setUsers] = useState<UserEntry[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [whitelist, setWhitelist] = useState<WhitelistEntry[]>([]);
@@ -71,6 +80,7 @@ export default function AdminPage() {
   const [deletingUsername, setDeletingUsername] = useState<string | null>(null);
   const [wlMsg, setWlMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [wlPage, setWlPage] = useState(1);
+  const [refreshingNames, setRefreshingNames] = useState(false);
   const WL_PAGE_SIZE = 10;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -195,6 +205,23 @@ export default function AdminPage() {
     }
   };
 
+  const handleRefreshNames = async () => {
+    setRefreshingNames(true);
+    try {
+      const res = await fetch("/api/admin/refresh-names", { method: "POST" });
+      if (res.ok) {
+        const { updated } = await res.json();
+        showMsg("ok", `已刷新 ${updated} 种方块的显示名称`);
+      } else {
+        showMsg("err", "刷新失败");
+      }
+    } catch {
+      showMsg("err", "刷新失败");
+    } finally {
+      setRefreshingNames(false);
+    }
+  };
+
   // ── Config management ──────────────────────────────────────────────────────
 
   const handleToggleWhitelist = async (enabled: boolean) => {
@@ -311,7 +338,7 @@ export default function AdminPage() {
             {NAV_ITEMS.map(({ key, label, icon }) => (
               <button
                 key={key}
-                onClick={() => setSection(key)}
+                onClick={() => router.push(`/admin?tab=${key}`, { scroll: false })}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left whitespace-nowrap md:w-full ${
                   section === key
                     ? "bg-primary text-primary-foreground"
@@ -335,13 +362,25 @@ export default function AdminPage() {
                 {NAV_ITEMS.find((n) => n.key === section)?.label}
               </h1>
             </div>
-            <button
-              onClick={fetchData}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-lg hover:bg-muted transition-colors"
-            >
-              <RefreshCw className="w-4 h-4" />
-              刷新
-            </button>
+            <div className="flex items-center gap-2">
+              {section === "projects" && (
+                <button
+                  onClick={handleRefreshNames}
+                  disabled={refreshingNames}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${refreshingNames ? "animate-spin" : ""}`} />
+                  刷新显示名称
+                </button>
+              )}
+              <button
+                onClick={fetchData}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-lg hover:bg-muted transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                刷新
+              </button>
+            </div>
           </div>
 
           {/* Action message */}
@@ -551,6 +590,7 @@ export default function AdminPage() {
             </div>
           ) : section === "projects" ? (
             /* ── Projects ───────────────────────────────────────────────────── */
+            <div className="space-y-4">
             <div className="border rounded-xl overflow-hidden">
               {/* Mobile: card layout */}
               <div className="md:hidden divide-y">
@@ -647,6 +687,7 @@ export default function AdminPage() {
                   )}
                 </tbody>
               </table>
+            </div>
             </div>
           ) : (
             /* ── Config ─────────────────────────────────────────────────────── */

@@ -1,6 +1,9 @@
 name: Build and Push Docker Image
 
 on:
+  push:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       tag:
@@ -8,13 +11,17 @@ on:
         required: false
         default: "latest"
 
+concurrency:
+  group: docker-${{ github.event.inputs.tag || 'latest' }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build:
-    name: Build Docker Image
+    name: Build and Push Docker Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -47,8 +54,9 @@ jobs:
         with:
           context: .
           push: true
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          provenance: false
+          cache-from: type=gha,scope=deps-${{ hashFiles('package-lock.json') }}
+          cache-to: type=gha,scope=deps-${{ hashFiles('package-lock.json') }},mode=max
