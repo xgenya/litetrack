@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(null);
   }
 
-  const avatarUrl = `https://mc-heads.net/avatar/${sessionUser.displayUsername}/64`;
+  const avatarUrl = `/api/avatar?username=${encodeURIComponent(sessionUser.displayUsername)}&size=64`;
   return NextResponse.json({
     username: sessionUser.displayUsername,
     nickname: sessionUser.nickname,

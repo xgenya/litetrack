@@ -77,6 +77,26 @@ function ClaimButton({
   );
 }
 
+function CollectStatus({ material }: { material: MaterialWithClaims }) {
+  const fullyCollected =
+    material.remainingBoxes <= 0 &&
+    material.allClaims.length > 0 &&
+    material.allClaims.every((c) => c.collectedAt != null);
+
+  if (fullyCollected) {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+        已完成
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+      未完成
+    </span>
+  );
+}
+
 export function MaterialTable({ litematic, user, claiming, onClaim }: MaterialTableProps) {
   return (
     <>
@@ -109,7 +129,7 @@ export function MaterialTable({ litematic, user, claiming, onClaim }: MaterialTa
                   <span className="text-xs text-muted-foreground">登录后认领</span>
                 )}
               </div>
-              {/* Row 2: stats */}
+              {/* Row 2: stats + collect status */}
               <div className="flex items-center gap-3 mb-1.5 text-xs text-muted-foreground">
                 <span>数量 <span className="tabular-nums text-foreground">{material.count.toLocaleString()}</span></span>
                 <span>·</span>
@@ -124,6 +144,8 @@ export function MaterialTable({ litematic, user, claiming, onClaim }: MaterialTa
                     <span className="text-emerald-500 font-medium">{req.value} 组</span>
                   )}
                 </span>
+                <span>·</span>
+                <CollectStatus material={material} />
               </div>
               {/* Row 3: claims */}
               {material.allClaims.length > 0 && (
@@ -145,6 +167,7 @@ export function MaterialTable({ litematic, user, claiming, onClaim }: MaterialTa
               <th className="p-3 font-medium text-right w-[100px]">数量</th>
               <th className="p-3 font-medium text-right w-[90px]">推荐备货</th>
               <th className="p-3 font-medium">认领记录</th>
+              <th className="p-3 font-medium text-center w-[90px]">收集状态</th>
               <th className="p-3 font-medium text-center w-[80px]">操作</th>
             </tr>
           </thead>
@@ -186,6 +209,9 @@ export function MaterialTable({ litematic, user, claiming, onClaim }: MaterialTa
                   </td>
                   <td className="p-3">
                     <ClaimList claims={material.allClaims} currentUser={user?.username ?? null} />
+                  </td>
+                  <td className="p-3 text-center">
+                    <CollectStatus material={material} />
                   </td>
                   <td className="p-3">
                     {user ? (
