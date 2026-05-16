@@ -132,7 +132,7 @@ export function MaterialCharts({ materials }: MaterialChartsProps) {
         </CardHeader>
         <CardContent>
           <div className="h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <BarChart
                 data={top10Data}
                 layout="vertical"
@@ -154,7 +154,7 @@ export function MaterialCharts({ materials }: MaterialChartsProps) {
         </CardHeader>
         <CardContent>
           <div className="h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <PieChart>
                 <Pie
                   data={dimensionData}

@@ -105,13 +105,14 @@ export default function Home() {
 
   const canManageProject = (project: Project) => {
     if (!user) return false;
-    return sameUsername(project.owner, user.username) ||
+    return user.isAdmin ||
+      sameUsername(project.owner, user.username) ||
       project.members.some(m => sameUsername(m.username, user.username) && m.role === "admin");
   };
 
   const canDeleteProject = (project: Project) => {
     if (!user) return false;
-    return sameUsername(project.owner, user.username);
+    return user.isAdmin || sameUsername(project.owner, user.username);
   };
 
   const handleUpdateStatus = async (projectId: string, status: ProjectStatus) => {
@@ -212,7 +213,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <TopBar />
 
       <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
@@ -314,7 +315,7 @@ export default function Home() {
                                   activeMenu === project.id ? null : project.id
                                 );
                               }}
-                              className="p-1 hover:bg-muted rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="p-1 hover:bg-muted rounded transition-colors"
                             >
                               <MoreVertical className="w-4 h-4" />
                             </button>

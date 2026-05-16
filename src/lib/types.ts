@@ -42,6 +42,7 @@ export interface Project {
   id: string;
   name: string;
   description: string;
+  about: string;
   status: ProjectStatus;
   owner: string;
   ownerNickname: string;

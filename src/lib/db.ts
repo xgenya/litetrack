@@ -92,6 +92,7 @@ function getDb(): Database.Database {
 
     db = new Database(DB_PATH);
     db.pragma("journal_mode = WAL");
+    db.pragma("foreign_keys = ON");
     db.pragma("busy_timeout = 5000");
     initTables();
   }
@@ -106,6 +107,7 @@ function initTables() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       description TEXT DEFAULT '',
+      about TEXT DEFAULT '',
       status TEXT DEFAULT 'active',
       owner TEXT NOT NULL DEFAULT '',
       created_at INTEGER NOT NULL,
@@ -215,6 +217,12 @@ function initTables() {
   }
 
   try {
+    database.exec(`ALTER TABLE projects ADD COLUMN about TEXT DEFAULT ''`);
+  } catch {
+    // Column already exists
+  }
+
+  try {
     database.exec(`ALTER TABLE litematics ADD COLUMN file_data BLOB`);
   } catch {
     // Column already exists
@@ -265,6 +273,7 @@ export function createProject(name: string, description: string = "", owner: str
     id,
     name,
     description,
+    about: "",
     status: "active",
     owner: ownerUsername,
     ownerNickname: "",
@@ -278,7 +287,7 @@ export function createProject(name: string, description: string = "", owner: str
 
 export function updateProject(
   id: string,
-  updates: { name?: string; description?: string; status?: ProjectStatus }
+  updates: { name?: string; description?: string; about?: string; status?: ProjectStatus }
 ): Project | null {
   const database = getDb();
   const now = Date.now();
@@ -293,6 +302,10 @@ export function updateProject(
   if (updates.description !== undefined) {
     sets.push("description = ?");
     values.push(updates.description);
+  }
+  if (updates.about !== undefined) {
+    sets.push("about = ?");
+    values.push(updates.about);
   }
   if (updates.status !== undefined) {
     sets.push("status = ?");
@@ -310,7 +323,23 @@ export function updateProject(
 
 export function deleteProject(id: string): boolean {
   const database = getDb();
-  const result = database.prepare("DELETE FROM projects WHERE id = ?").run(id);
+  const result = database.transaction((projectId: string) => {
+    const project = database
+      .prepare("SELECT 1 FROM projects WHERE id = ?")
+      .get(projectId);
+    if (!project) return { changes: 0 };
+
+    database.prepare("DELETE FROM claims WHERE project_id = ?").run(projectId);
+    database
+      .prepare(
+        `DELETE FROM materials
+         WHERE litematic_id IN (SELECT id FROM litematics WHERE project_id = ?)`
+      )
+      .run(projectId);
+    database.prepare("DELETE FROM litematics WHERE project_id = ?").run(projectId);
+    database.prepare("DELETE FROM project_members WHERE project_id = ?").run(projectId);
+    return database.prepare("DELETE FROM projects WHERE id = ?").run(projectId);
+  })(id);
   return result.changes > 0;
 }
 
@@ -318,6 +347,7 @@ interface ProjectRow {
   id: string;
   name: string;
   description: string;
+  about: string | null;
   status: ProjectStatus;
   owner: string;
   owner_nickname: string;
@@ -385,6 +415,7 @@ export function getProject(id: string): Project | null {
     id: projectRow.id,
     name: projectRow.name,
     description: projectRow.description,
+    about: projectRow.about ?? "",
     status: projectRow.status,
     owner: projectRow.owner || "",
     ownerNickname: projectRow.owner_nickname,
@@ -406,6 +437,7 @@ function mapProjectRow(
     id: projectRow.id,
     name: projectRow.name,
     description: projectRow.description,
+    about: projectRow.about ?? "",
     status: projectRow.status,
     owner: projectRow.owner || "",
     ownerNickname: projectRow.owner_nickname,

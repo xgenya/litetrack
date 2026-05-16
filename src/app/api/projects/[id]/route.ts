@@ -31,17 +31,18 @@ export async function PATCH(
     return NextResponse.json({ error: "请先登录" }, { status: 401 });
   }
 
-  if (!canEditProject(id, sessionUser.username)) {
+  if (!canEditProject(id, sessionUser.username) && !sessionUser.isAdmin) {
     return NextResponse.json({ error: "没有权限修改此项目" }, { status: 403 });
   }
 
   const body = await readJsonBody(request);
   if (!body) return invalidJsonResponse();
-  const { name, description, status } = body;
+  const { name, description, about, status } = body;
 
   const project = updateProject(id, {
     name: typeof name === "string" ? name : undefined,
     description: typeof description === "string" ? description : undefined,
+    about: typeof about === "string" ? about : undefined,
     status: status === "active" || status === "paused" || status === "completed" ? status : undefined,
   });
   if (!project) {

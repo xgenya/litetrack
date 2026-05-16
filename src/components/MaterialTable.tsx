@@ -1,8 +1,11 @@
+import { useMemo, useState } from "react";
 import { Claim, Material } from "@/lib/types";
 import { formatUser, sameUsername } from "@/lib/utils";
 import { getRequiredDisplay } from "@/lib/minecraft";
 import { BlockIcon, BlockIconRaw } from "./BlockIcon";
 import { McAvatar } from "./McAvatar";
+
+const PAGE_SIZE_OPTIONS = [30, 50, 100] as const;
 
 export interface MaterialWithClaims extends Material {
   litematicId: string;
@@ -97,12 +100,99 @@ function CollectStatus({ material }: { material: MaterialWithClaims }) {
   );
 }
 
+function PaginationControls({
+  page,
+  pageSize,
+  total,
+  totalPages,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+}) {
+  if (total === 0) return null;
+
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3 text-sm">
+      <div className="text-muted-foreground">
+        显示 {start}-{end} / {total} 条
+      </div>
+      <div className="flex items-center gap-3">
+        <label className="flex items-center gap-2 text-muted-foreground">
+          每页
+          <select
+            value={pageSize}
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+            className="h-8 rounded-md border bg-background px-2 text-foreground outline-none"
+          >
+            {PAGE_SIZE_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onPageChange(page - 1)}
+            disabled={page <= 1}
+            className="px-2.5 py-1 rounded-md border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            上一页
+          </button>
+          <span className="px-2 text-muted-foreground">
+            {page} / {totalPages}
+          </span>
+          <button
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages}
+            className="px-2.5 py-1 rounded-md border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            下一页
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function MaterialTable({ litematic, user, claiming, onClaim }: MaterialTableProps) {
+  const [pageSize, setPageSize] = useState<number>(30);
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(litematic.materials.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedMaterials = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return litematic.materials.slice(start, start + pageSize);
+  }, [litematic.materials, currentPage, pageSize]);
+
+  const handlePageSizeChange = (nextPageSize: number) => {
+    setPageSize(nextPageSize);
+    setPage(1);
+  };
+
   return (
     <>
+      <PaginationControls
+        page={currentPage}
+        pageSize={pageSize}
+        total={litematic.materials.length}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        onPageSizeChange={handlePageSizeChange}
+      />
+
       {/* ── Mobile: card layout ── */}
       <div className="md:hidden divide-y">
-        {litematic.materials.map((material, index) => {
+        {paginatedMaterials.map((material, index) => {
           const key = `${litematic.id}-${material.blockId}`;
           const req = getRequiredDisplay(material.count);
           const done = material.remainingBoxes <= 0;
@@ -172,7 +262,7 @@ export function MaterialTable({ litematic, user, claiming, onClaim }: MaterialTa
             </tr>
           </thead>
           <tbody>
-            {litematic.materials.map((material, index) => {
+            {paginatedMaterials.map((material, index) => {
               const key = `${litematic.id}-${material.blockId}`;
               const req = getRequiredDisplay(material.count);
 
@@ -238,6 +328,15 @@ export function MaterialTable({ litematic, user, claiming, onClaim }: MaterialTa
           </tbody>
         </table>
       </div>
+
+      <PaginationControls
+        page={currentPage}
+        pageSize={pageSize}
+        total={litematic.materials.length}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        onPageSizeChange={handlePageSizeChange}
+      />
     </>
   );
 }

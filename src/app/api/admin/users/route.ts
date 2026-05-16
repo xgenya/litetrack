@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     users.map((u) => ({
       username: u.username,
       displayUsername: u.displayUsername,
+      nickname: u.nickname,
       isActive: u.isActive,
       isAdmin: isAdminUsername(u.username) || u.isAdmin,
       isConfigAdmin: isAdminUsername(u.username),

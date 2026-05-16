@@ -4,7 +4,9 @@ export function Footer() {
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-10 border-t bg-background/95 backdrop-blur-sm py-3 text-center text-xs text-muted-foreground">
       <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-        <span>© {new Date().getFullYear()} LiteTrack</span>
+        <Link href="/about" className="hover:text-foreground transition-colors">
+          © {new Date().getFullYear()} LiteTrack
+        </Link>
         <span className="hidden sm:inline text-border">|</span>
         <Link
           href="https://github.com/xgenya/litetrack"

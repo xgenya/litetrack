@@ -18,6 +18,7 @@ import {
   Upload,
   X,
   KeyRound,
+  Search,
 } from "lucide-react";
 import { Project, ProjectStatus } from "@/lib/types";
 import { sameUsername } from "@/lib/utils";
@@ -25,6 +26,7 @@ import { sameUsername } from "@/lib/utils";
 interface UserEntry {
   username: string;
   displayUsername: string;
+  nickname: string;
   isActive: boolean;
   isAdmin: boolean;
   isConfigAdmin: boolean;
@@ -65,6 +67,7 @@ function AdminPageContent() {
 
   const section = (searchParams.get("tab") as Section | null) ?? "config";
   const [users, setUsers] = useState<UserEntry[]>([]);
+  const [userSearch, setUserSearch] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
   const [whitelist, setWhitelist] = useState<WhitelistEntry[]>([]);
   const [whitelistEnabled, setWhitelistEnabled] = useState(true);
@@ -84,6 +87,14 @@ function AdminPageContent() {
   const [refreshingNamesFor, setRefreshingNamesFor] = useState<string | null>(null);
   const WL_PAGE_SIZE = 10;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const normalizedUserSearch = userSearch.trim().toLocaleLowerCase();
+  const filteredUsers = normalizedUserSearch
+    ? users.filter((u) =>
+        [u.username, u.displayUsername, u.nickname]
+          .filter(Boolean)
+          .some((value) => value.toLocaleLowerCase().includes(normalizedUserSearch))
+      )
+    : users;
 
   useEffect(() => {
     if (!isLoading && (!user || !user.isAdmin)) {
@@ -333,7 +344,7 @@ function AdminPageContent() {
   if (isLoading || (!user?.isAdmin && !isLoading)) return null;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen flex flex-col">
       <TopBar title="后台管理" />
 
       <div className="flex flex-1 max-w-6xl w-full mx-auto p-4 md:p-8 gap-6 flex-col md:flex-row">
@@ -396,13 +407,25 @@ function AdminPageContent() {
             <div className="text-center py-16 text-muted-foreground">加载中...</div>
           ) : section === "users" ? (
             /* ── Users ─────────────────────────────────────────────────────── */
+            <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                placeholder="搜索用户名、显示名或昵称"
+                className="w-full rounded-lg border bg-background pl-9 pr-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+              />
+            </div>
             <div className="border rounded-xl overflow-hidden">
               {/* Mobile: card layout */}
               <div className="md:hidden divide-y">
-                {users.length === 0 ? (
-                  <p className="px-4 py-8 text-center text-muted-foreground text-sm">暂无用户</p>
+                {filteredUsers.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-muted-foreground text-sm">
+                    {users.length === 0 ? "暂无用户" : "没有匹配的用户"}
+                  </p>
                 ) : (
-                  users.map((u) => (
+                  filteredUsers.map((u) => (
                     <div key={u.username} className="p-4 space-y-2.5">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -484,14 +507,14 @@ function AdminPageContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.length === 0 ? (
+                  {filteredUsers.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-sm">
-                        暂无用户
+                        {users.length === 0 ? "暂无用户" : "没有匹配的用户"}
                       </td>
                     </tr>
                   ) : (
-                    users.map((u) => (
+                    filteredUsers.map((u) => (
                       <tr key={u.username} className="border-b last:border-0 hover:bg-muted/20">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
@@ -582,6 +605,7 @@ function AdminPageContent() {
                   )}
                 </tbody>
               </table>
+            </div>
             </div>
           ) : section === "projects" ? (
             /* ── Projects ───────────────────────────────────────────────────── */

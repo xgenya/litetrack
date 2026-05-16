@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, use } from "react";
+import { useState, useEffect, useCallback, use, useMemo } from "react";
 import { useUser } from "@/lib/user-context";
-import { Project, Material, Litematic, ProjectRole } from "@/lib/types";
+import { Project, Material, ProjectRole } from "@/lib/types";
 import { formatUser, sameUsername } from "@/lib/utils";
 import { toast } from "sonner";
 import { McAvatar } from "@/components/McAvatar";
-import { MaterialTable, MaterialWithClaims } from "@/components/MaterialTable";
+import { MaterialTable } from "@/components/MaterialTable";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,17 +20,15 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import {
-  Package,
   Layers,
-  Box,
   Search,
   Link as LinkIcon,
   Check,
+  Pencil,
   Users,
   Upload,
   Trash2,
   FileBox,
-  Trophy,
   TrendingUp,
 } from "lucide-react";
 
@@ -37,6 +36,47 @@ const COLORS = [
   "#8884d8","#82ca9d","#ffc658","#ff7300","#00C49F",
   "#FFBB28","#FF8042","#0088FE","#a4de6c","#d0ed57",
 ];
+
+function getProgressTone(progress: number) {
+  if (progress >= 100) {
+    return {
+      label: "已完成",
+      badge: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+      bar: "bg-green-500",
+      glow: "shadow-green-500/25",
+    };
+  }
+  if (progress >= 75) {
+    return {
+      label: "冲刺中",
+      badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+      bar: "bg-blue-500",
+      glow: "shadow-blue-500/25",
+    };
+  }
+  if (progress >= 40) {
+    return {
+      label: "推进中",
+      badge: "bg-primary/10 text-primary",
+      bar: "bg-primary",
+      glow: "shadow-primary/25",
+    };
+  }
+  if (progress > 0) {
+    return {
+      label: "起步中",
+      badge: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+      bar: "bg-amber-500",
+      glow: "shadow-amber-500/25",
+    };
+  }
+  return {
+    label: "待开始",
+    badge: "bg-muted text-muted-foreground",
+    bar: "bg-muted-foreground",
+    glow: "shadow-muted-foreground/20",
+  };
+}
 
 interface ProjectWithRole extends Project {
   userRole?: ProjectRole | null;
@@ -55,7 +95,11 @@ export default function ProjectPage({
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [claiming, setClaiming] = useState<string | null>(null);
+  const [togglingClaim, setTogglingClaim] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [editingAbout, setEditingAbout] = useState(false);
+  const [aboutDraft, setAboutDraft] = useState("");
+  const [savingAbout, setSavingAbout] = useState(false);
 
   const fetchProject = useCallback(async () => {
     try {
@@ -77,7 +121,7 @@ export default function ProjectPage({
     fetchProject();
   }, [fetchProject]);
 
-  const canEdit = project?.userRole === "owner" || project?.userRole === "admin";
+  const canEdit = user?.isAdmin || project?.userRole === "owner" || project?.userRole === "admin";
 
   const handleUpload = async (file: File) => {
     if (!user) {
@@ -183,10 +227,139 @@ export default function ProjectPage({
     }
   };
 
+  const handleToggleCollected = async (claimId: string, currentCollected: boolean) => {
+    if (!project) return;
+
+    setTogglingClaim(claimId);
+    try {
+      const res = await fetch(`/api/user/claims/${claimId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ collected: !currentCollected }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error);
+      }
+
+      const nextCollectedAt = currentCollected ? null : Date.now();
+      setProject({
+        ...project,
+        claims: project.claims.map((claim) =>
+          claim.id === claimId ? { ...claim, collectedAt: nextCollectedAt } : claim
+        ),
+      });
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setTogglingClaim(null);
+    }
+  };
+
+  const startEditingAbout = () => {
+    if (!project) return;
+    setAboutDraft(project.about);
+    setEditingAbout(true);
+  };
+
+  const handleSaveAbout = async () => {
+    if (!project) return;
+
+    setSavingAbout(true);
+    try {
+      const res = await fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ about: aboutDraft.trim() }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "保存失败");
+      }
+
+      const updated = await res.json();
+      setProject({ ...project, ...updated, userRole: project.userRole });
+      setEditingAbout(false);
+      toast.success("关于信息已保存");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSavingAbout(false);
+    }
+  };
+
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "materials" | "stats">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "about" | "materials" | "members" | "stats">("overview");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [claimFilter, setClaimFilter] = useState<"all" | "claimed" | "unclaimed">("all");
+  const [activeMaterialLitematicId, setActiveMaterialLitematicId] = useState<string | null>(null);
+
+  const filteredLitematics = useMemo(() => {
+    if (!project) return [];
+
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const claimsByMaterial = new Map<string, typeof project.claims>();
+    for (const claim of project.claims) {
+      const key = `${claim.litematicId}\u0000${claim.blockId}`;
+      const claims = claimsByMaterial.get(key) ?? [];
+      claims.push(claim);
+      claimsByMaterial.set(key, claims);
+    }
+
+    return project.litematics.map((litematic) => ({
+      ...litematic,
+      materials: litematic.materials
+        .map((material) => {
+          const claims =
+            claimsByMaterial.get(`${litematic.id}\u0000${material.blockId}`) ?? [];
+          const claimedBoxes = claims.reduce((sum, claim) => sum + claim.boxes, 0);
+          return {
+            ...material,
+            litematicId: litematic.id,
+            litematicName: litematic.filename,
+            claimedBoxes,
+            remainingBoxes: material.boxes - claimedBoxes,
+            myClaims: user
+              ? claims.filter((claim) => sameUsername(claim.username, user.username))
+              : [],
+            allClaims: claims,
+          };
+        })
+        .filter((material) => {
+          const matchesSearch =
+            normalizedSearch === "" ||
+            material.displayName.toLowerCase().includes(normalizedSearch) ||
+            material.blockId.toLowerCase().includes(normalizedSearch);
+
+          return (
+            matchesSearch &&
+            (categoryFilter === "all" || getBlockCategory(material.blockId) === categoryFilter) &&
+            (claimFilter === "all" ||
+              (claimFilter === "claimed" && material.remainingBoxes === 0) ||
+              (claimFilter === "unclaimed" && material.remainingBoxes > 0))
+          );
+        })
+        .sort((a, b) => b.remainingBoxes - a.remainingBoxes),
+    }));
+  }, [categoryFilter, claimFilter, project, searchTerm, user]);
+
+  const activeMaterialLitematic =
+    filteredLitematics.find((litematic) => litematic.id === activeMaterialLitematicId) ??
+    filteredLitematics[0] ??
+    null;
+
+  useEffect(() => {
+    if (filteredLitematics.length === 0) {
+      if (activeMaterialLitematicId !== null) setActiveMaterialLitematicId(null);
+      return;
+    }
+
+    if (!filteredLitematics.some((litematic) => litematic.id === activeMaterialLitematicId)) {
+      setActiveMaterialLitematicId(filteredLitematics[0].id);
+    }
+  }, [activeMaterialLitematicId, filteredLitematics]);
 
   const copyLink = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -212,54 +385,127 @@ export default function ProjectPage({
 
   const allMaterials: Material[] = project.litematics.flatMap((l) => l.materials);
 
-  const getMaterialsWithClaims = (litematic: Litematic): MaterialWithClaims[] => {
-    return litematic.materials.map((m) => {
-      const claims = project.claims.filter(
-        (c) => c.litematicId === litematic.id && c.blockId === m.blockId
-      );
-      const claimedBoxes = claims.reduce((sum, c) => sum + c.boxes, 0);
-      return {
-        ...m,
-        litematicId: litematic.id,
-        litematicName: litematic.filename,
-        claimedBoxes,
-        remainingBoxes: m.boxes - claimedBoxes,
-        myClaims: user ? claims.filter((c) => sameUsername(c.username, user.username)) : [],
-        allClaims: claims,
-      };
-    });
-  };
-
-  const filteredLitematics = project.litematics.map((l) => ({
-    ...l,
-    materials: getMaterialsWithClaims(l)
-      .filter(
-        (m) =>
-          (m.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            m.blockId.toLowerCase().includes(searchTerm.toLowerCase())) &&
-          (categoryFilter === "all" || getBlockCategory(m.blockId) === categoryFilter) &&
-          (claimFilter === "all" ||
-            (claimFilter === "claimed" && m.remainingBoxes === 0) ||
-            (claimFilter === "unclaimed" && m.remainingBoxes > 0))
-      )
-      .sort((a, b) => b.remainingBoxes - a.remainingBoxes),
-  }));
-
-  const myTotalClaims = user
-    ? project.claims
-        .filter((c) => sameUsername(c.username, user.username))
-        .reduce((sum, c) => sum + c.boxes, 0)
-    : 0;
-
   const totalClaimedBoxes = project.claims.reduce((sum, c) => sum + c.boxes, 0);
+  const myClaims = user
+    ? project.claims.filter((c) => sameUsername(c.username, user.username))
+    : [];
+  const myTotalClaims = myClaims.reduce((sum, c) => sum + c.boxes, 0);
+  const myCollectedBoxes = myClaims
+    .filter((c) => c.collectedAt != null)
+    .reduce((sum, c) => sum + c.boxes, 0);
+  const myPendingBoxes = Math.max(myTotalClaims - myCollectedBoxes, 0);
+  const myCollectProgress = myTotalClaims > 0 ? Math.round((myCollectedBoxes / myTotalClaims) * 100) : 0;
+  const myProjectShare = totalClaimedBoxes > 0 ? Math.round((myTotalClaims / totalClaimedBoxes) * 100) : 0;
   const totalBoxes = project.litematics.reduce(
     (sum, l) => sum + l.materials.reduce((s, m) => s + m.boxes, 0),
     0
   );
   const claimProgress = totalBoxes > 0 ? (totalClaimedBoxes / totalBoxes) * 100 : 0;
+  const boundedClaimProgress = Math.min(Math.max(claimProgress, 0), 100);
+  const totalBlocks = project.litematics.reduce((sum, l) => sum + l.totalBlocks, 0);
+  const totalMaterialTypes = new Set(allMaterials.map((m) => m.blockId)).size;
+  const claimedMaterialTypes = new Set(project.claims.map((c) => c.blockId)).size;
+  const totalCollectedBoxes = project.claims
+    .filter((claim) => claim.collectedAt != null)
+    .reduce((sum, claim) => sum + claim.boxes, 0);
+  const collectionProgress = totalClaimedBoxes > 0 ? (totalCollectedBoxes / totalClaimedBoxes) * 100 : 0;
+  const boundedCollectedShare = totalBoxes > 0
+    ? Math.min(Math.max((totalCollectedBoxes / totalBoxes) * 100, 0), 100)
+    : 0;
+  const remainingBoxes = Math.max(totalBoxes - totalClaimedBoxes, 0);
+  const progressTone = getProgressTone(boundedClaimProgress);
+  const materialClaimMap: Record<string, { claimed: number; total: number; displayName: string }> = {};
+  allMaterials.forEach((material) => {
+    if (!materialClaimMap[material.blockId]) {
+      materialClaimMap[material.blockId] = {
+        claimed: 0,
+        total: 0,
+        displayName: material.displayName,
+      };
+    }
+    materialClaimMap[material.blockId].total += material.boxes;
+  });
+  project.claims.forEach((claim) => {
+    if (materialClaimMap[claim.blockId]) {
+      materialClaimMap[claim.blockId].claimed += claim.boxes;
+    }
+  });
+  const mostClaimedMaterial = Object.entries(materialClaimMap)
+    .filter(([, data]) => data.claimed > 0)
+    .sort(([, a], [, b]) => b.claimed - a.claimed)[0];
+  const leastClaimedMaterial = Object.entries(materialClaimMap)
+    .filter(([, data]) => data.total - data.claimed > 0)
+    .sort(([, a], [, b]) => (b.total - b.claimed) - (a.total - a.claimed))[0];
+  const materialClaimData = Object.entries(materialClaimMap)
+    .map(([blockId, data]) => ({
+      blockId,
+      name: data.displayName.length > 6 ? data.displayName.slice(0, 6) + "…" : data.displayName,
+      fullName: data.displayName,
+      claimed: data.claimed,
+      remaining: data.total - data.claimed,
+      total: data.total,
+    }))
+    .filter((material) => material.claimed > 0)
+    .sort((a, b) => b.claimed - a.claimed)
+    .slice(0, 10);
+  const litematicSummaries = project.litematics.map((litematic) => {
+    const litematicClaims = project.claims.filter((claim) => claim.litematicId === litematic.id);
+    const claimedBoxes = litematicClaims.reduce((sum, claim) => sum + claim.boxes, 0);
+    const collectedBoxes = litematicClaims
+      .filter((claim) => claim.collectedAt != null)
+      .reduce((sum, claim) => sum + claim.boxes, 0);
+    const totalLitematicBoxes = litematic.materials.reduce((sum, material) => sum + material.boxes, 0);
+    return {
+      ...litematic,
+      claimedBoxes,
+      collectedBoxes,
+      totalBoxes: totalLitematicBoxes,
+      progress: totalLitematicBoxes > 0 ? Math.min(Math.round((claimedBoxes / totalLitematicBoxes) * 100), 100) : 0,
+      collectionProgress: claimedBoxes > 0 ? Math.min(Math.round((collectedBoxes / claimedBoxes) * 100), 100) : 0,
+    };
+  });
+  const memberStats = project.members
+    .map((member) => {
+      const memberClaims = project.claims.filter((claim) => sameUsername(claim.username, member.username));
+      const claimedBoxes = memberClaims.reduce((sum, claim) => sum + claim.boxes, 0);
+      const collectedBoxes = memberClaims
+        .filter((claim) => claim.collectedAt != null)
+        .reduce((sum, claim) => sum + claim.boxes, 0);
+      return {
+        ...member,
+        claimCount: memberClaims.length,
+        claimedBoxes,
+        collectedBoxes,
+        contributionPercent: totalClaimedBoxes > 0 ? Math.round((claimedBoxes / totalClaimedBoxes) * 100) : 0,
+        collectedPercent: claimedBoxes > 0 ? Math.round((collectedBoxes / claimedBoxes) * 100) : 0,
+      };
+    })
+    .sort((a, b) => {
+      const roleOrder: Record<ProjectRole, number> = { owner: 0, admin: 1, member: 2 };
+      return (
+        b.claimedBoxes - a.claimedBoxes ||
+        b.collectedBoxes - a.collectedBoxes ||
+        roleOrder[a.role] - roleOrder[b.role] ||
+        a.joinedAt - b.joinedAt
+      );
+    });
+  const activeMemberCount = memberStats.filter((member) => member.claimedBoxes > 0).length;
+  const topContributor = memberStats.find((member) => member.claimedBoxes > 0);
+  const pieData = (() => {
+    const contributors = memberStats.filter((member) => member.claimedBoxes > 0);
+    const top = contributors.slice(0, 8);
+    const rest = contributors.slice(8);
+    const restTotal = rest.reduce((sum, member) => sum + member.claimedBoxes, 0);
+    const data = top.map((member) => ({
+      name: formatUser(member.username, member.nickname),
+      value: member.claimedBoxes,
+    }));
+    if (restTotal > 0) data.push({ name: "其他", value: restTotal });
+    return data;
+  })();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <TopBar 
         title={project.name}
         backLink="/"
@@ -312,10 +558,10 @@ export default function ProjectPage({
           )}
         </div>
 
-        <div className="flex border-b">
+        <div className="flex overflow-x-auto border-b">
           <button
             onClick={() => setActiveTab("overview")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`shrink-0 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === "overview"
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -324,8 +570,18 @@ export default function ProjectPage({
             概况
           </button>
           <button
+            onClick={() => setActiveTab("about")}
+            className={`shrink-0 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "about"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            关于
+          </button>
+          <button
             onClick={() => setActiveTab("materials")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`shrink-0 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === "materials"
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -334,8 +590,18 @@ export default function ProjectPage({
             材料列表
           </button>
           <button
+            onClick={() => setActiveTab("members")}
+            className={`shrink-0 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "members"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            参与人员
+          </button>
+          <button
             onClick={() => setActiveTab("stats")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`shrink-0 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === "stats"
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -346,273 +612,423 @@ export default function ProjectPage({
         </div>
 
         {activeTab === "overview" && (
-          <>
-            <div className="grid gap-4 md:grid-cols-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">发起人</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-2">
-                    <McAvatar
-                      username={project.owner}
-                      size={24}
-                      className="w-6 h-6 rounded block-icon"
-                    />
-                    <span className="text-lg font-bold truncate">{project.owner}</span>
+          <div className="space-y-6">
+            <section className="lt-hero p-6 sm:p-8 md:p-10">
+              <div className="lt-wave" aria-hidden="true">
+                <div className="lt-wave-layer lt-wave-claim" style={{ height: `${boundedClaimProgress}%` }}>
+                  <svg className="lt-wave-svg lt-wave-svg-back" viewBox="0 0 1200 60" preserveAspectRatio="none">
+                    <path d="M0,30 C75,22 225,38 300,30 C375,22 525,38 600,30 C675,22 825,38 900,30 C975,22 1125,38 1200,30 L1200,60 L0,60 Z" />
+                  </svg>
+                  <svg className="lt-wave-svg lt-wave-svg-front" viewBox="0 0 1200 60" preserveAspectRatio="none">
+                    <path d="M0,30 C75,38 225,22 300,30 C375,38 525,22 600,30 C675,38 825,22 900,30 C975,38 1125,22 1200,30 L1200,60 L0,60 Z" />
+                  </svg>
+                </div>
+                {boundedCollectedShare > 0 && (
+                  <div className="lt-wave-layer lt-wave-collect" style={{ height: `${boundedCollectedShare}%` }}>
+                    <svg className="lt-wave-svg lt-wave-svg-back" viewBox="0 0 1200 60" preserveAspectRatio="none">
+                      <path d="M0,30 C75,22 225,38 300,30 C375,22 525,38 600,30 C675,22 825,38 900,30 C975,22 1125,38 1200,30 L1200,60 L0,60 Z" />
+                    </svg>
+                    <svg className="lt-wave-svg lt-wave-svg-front" viewBox="0 0 1200 60" preserveAspectRatio="none">
+                      <path d="M0,30 C75,38 225,22 300,30 C375,38 525,22 600,30 C675,38 825,22 900,30 C975,38 1125,22 1200,30 L1200,60 L0,60 Z" />
+                    </svg>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {new Date(project.createdAt).toLocaleDateString("zh-CN", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">投影数量</CardTitle>
-                  <FileBox className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{project.litematics.length}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">总方块数</CardTitle>
-                  <Box className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {project.litematics
-                      .reduce((sum, l) => sum + l.totalBlocks, 0)
-                      .toLocaleString()}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">认领进度</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {totalClaimedBoxes}/{totalBoxes}
-                  </div>
-                  <div className="h-2 bg-muted rounded-full mt-2 overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all"
-                      style={{ width: `${claimProgress}%` }}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-              {user && (
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium">我的认领</CardTitle>
-                    <Package className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold flex items-center gap-1">
-                      {myTotalClaims}
-                      <BlockIconRaw blockId="minecraft:shulker_box" size={20} />
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <span className="inline-flex items-center gap-2 rounded-full border border-foreground/15 bg-background/70 px-3 py-1 text-xs font-medium text-foreground/80 backdrop-blur">
+                  <span className={`h-1.5 w-1.5 rounded-full ${progressTone.bar}`} />
+                  {progressTone.label}
+                </span>
+
+                <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-background/65 px-3 py-2 backdrop-blur">
+                  <McAvatar username={project.owner} size={36} className="block-icon h-9 w-9 rounded" />
+                  <div className="min-w-0 leading-tight">
+                    <div className="text-[11px] text-muted-foreground">发起人</div>
+                    <div className="truncate text-sm font-medium">
+                      {formatUser(project.owner, project.ownerNickname)}
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            {project.litematics.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>投影列表</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {project.litematics.map((litematic) => {
-                      const litematicClaims = project.claims.filter(
-                        (c) => c.litematicId === litematic.id
-                      );
-                      const litematicClaimedBoxes = litematicClaims.reduce(
-                        (sum, c) => sum + c.boxes,
-                        0
-                      );
-                      const litematicTotalBoxes = litematic.materials.reduce(
-                        (sum, m) => sum + m.boxes,
-                        0
-                      );
-                      const progress =
-                        litematicTotalBoxes > 0
-                          ? Math.round(
-                              (litematicClaimedBoxes / litematicTotalBoxes) * 100
-                            )
-                          : 0;
-
-                      return (
-                        <div
-                          key={litematic.id}
-                          className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/30 transition-colors"
-                        >
-                          <FileBox className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{litematic.filename}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {litematic.totalTypes} 种材料 · {litematic.totalBlocks.toLocaleString()} 方块
-                            </div>
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <span className="text-sm font-medium tabular-nums flex items-center gap-0.5">
-                                {litematicClaimedBoxes}/{litematicTotalBoxes}
-                                <BlockIconRaw blockId="minecraft:shulker_box" size={14} />
-                              </span>
-                              <span className="text-xs text-muted-foreground">{progress}% 完成</span>
-                            </div>
-                          </div>
-                          {canEdit && (
-                            <button
-                              onClick={() => handleDeleteLitematic(litematic.id)}
-                              className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors flex-shrink-0"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
+                    <div className="text-[11px] text-muted-foreground">
+                      {new Date(project.createdAt).toLocaleDateString("zh-CN")} 创建
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                </div>
+              </div>
+
+              <div className="mt-8">
+                <div className="flex items-baseline gap-3">
+                  <AnimatedNumber
+                    value={totalBoxes > 0 ? boundedClaimProgress : 0}
+                    duration={1400}
+                    className="font-mono text-[96px] font-light leading-none tracking-tight text-foreground sm:text-[128px]"
+                  />
+                  <span className="text-4xl font-light text-foreground/40">%</span>
+                </div>
+                <div className="mt-2 text-base font-medium text-foreground">整体认领进度</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  共 <AnimatedNumber value={totalBoxes} className="font-mono text-foreground tabular-nums" /> 盒
+                  <span className="mx-2 text-foreground/25">·</span>
+                  覆盖 <AnimatedNumber value={totalMaterialTypes} className="font-mono text-foreground tabular-nums" /> 种材料
+                </div>
+              </div>
+
+              <div className="mt-8 space-y-2.5">
+                <div className="lt-hairline relative h-px w-full">
+                  <div
+                    className="absolute inset-y-[-2px] left-0 h-[5px] rounded-full bg-foreground shadow-[0_0_14px_color-mix(in_oklch,var(--foreground)_30%,transparent)] transition-[width] duration-1000"
+                    style={{ width: `${boundedClaimProgress}%` }}
+                  />
+                  {boundedCollectedShare > 0 && (
+                    <div
+                      className="absolute inset-y-[-2px] left-0 h-[5px] rounded-full bg-emerald-500 shadow-[0_0_14px_rgba(16,185,129,0.55)] transition-[width] duration-1000"
+                      style={{ width: `${boundedCollectedShare}%` }}
+                    />
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-[3px] w-4 rounded-full bg-foreground" />
+                    <span className="text-foreground/80">认领</span>
+                    <AnimatedNumber value={boundedClaimProgress} format={(v) => `${v}%`} className="font-mono tabular-nums text-foreground" />
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-[3px] w-4 rounded-full bg-emerald-500" />
+                    <span className="text-foreground/80">收集</span>
+                    <AnimatedNumber value={boundedCollectedShare} format={(v) => `${v}%`} className="font-mono tabular-nums text-foreground" />
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-7 grid grid-cols-3 gap-4 border-t border-foreground/10 pt-5 sm:gap-6">
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground sm:text-sm">已认领</div>
+                  <div className="mt-1.5 flex items-baseline gap-1.5">
+                    <AnimatedNumber
+                      value={totalClaimedBoxes}
+                      className="font-mono text-2xl font-light tabular-nums text-foreground sm:text-3xl"
+                    />
+                    <span className="text-xs text-muted-foreground">盒</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-emerald-700 sm:text-sm dark:text-emerald-400">已收集</div>
+                  <div className="mt-1.5 flex items-baseline gap-1.5">
+                    <AnimatedNumber
+                      value={totalCollectedBoxes}
+                      className="font-mono text-2xl font-light tabular-nums text-emerald-600 sm:text-3xl dark:text-emerald-400"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      盒 · <AnimatedNumber value={totalClaimedBoxes > 0 ? collectionProgress : 0} format={(v) => `${v}%`} className="font-mono tabular-nums" />
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground sm:text-sm">待认领</div>
+                  <div className="mt-1.5 flex items-baseline gap-1.5">
+                    <AnimatedNumber
+                      value={remainingBoxes}
+                      className="font-mono text-2xl font-light tabular-nums text-foreground sm:text-3xl"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      盒 · <AnimatedNumber value={totalBoxes > 0 ? (remainingBoxes / totalBoxes) * 100 : 0} format={(v) => `${v}%`} className="font-mono tabular-nums" />
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-7 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-foreground/10 pt-5 sm:grid-cols-4 sm:gap-x-6">
+                <div className="space-y-1.5">
+                  <div className="text-xs text-muted-foreground">投影</div>
+                  <div className="flex items-baseline gap-1.5">
+                    <AnimatedNumber value={project.litematics.length} className="font-mono text-xl font-light tabular-nums text-foreground" />
+                    <span className="text-xs text-muted-foreground">个</span>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="text-xs text-muted-foreground">成员</div>
+                  <div className="flex items-baseline gap-1.5">
+                    <AnimatedNumber value={project.members.length} className="font-mono text-xl font-light tabular-nums text-foreground" />
+                    <span className="text-xs text-muted-foreground">
+                      人 · <AnimatedNumber value={activeMemberCount} className="font-mono text-foreground" /> 活跃
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="text-xs text-muted-foreground">材料覆盖</div>
+                  <div className="flex items-baseline gap-1.5">
+                    <AnimatedNumber value={claimedMaterialTypes} className="font-mono text-xl font-light tabular-nums text-foreground" />
+                    <span className="text-xs text-muted-foreground">
+                      / <AnimatedNumber value={totalMaterialTypes} className="font-mono text-foreground" /> 种
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="text-xs text-muted-foreground">方块总数</div>
+                  <div className="flex items-baseline gap-1.5">
+                    <AnimatedNumber value={totalBlocks} className="font-mono text-xl font-light tabular-nums text-foreground" />
+                  </div>
+                </div>
+              </div>
+            </section>
 
             {user && myTotalClaims > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>我的认领</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {project.litematics.map((litematic) => {
-                      const myClaims = project.claims.filter(
-                        (c) =>
-                          c.litematicId === litematic.id &&
-                          sameUsername(c.username, user.username)
-                      );
-                      if (myClaims.length === 0) return null;
+              <div className="lt-panel overflow-hidden">
+                <div className="flex flex-col gap-6 p-5 sm:flex-row sm:items-stretch sm:p-6">
+                  <div className="flex items-center gap-4 sm:w-64 sm:shrink-0">
+                    <McAvatar username={user.username} size={56} className="block-icon h-14 w-14 rounded-lg" />
+                    <div className="min-w-0">
+                      <div className="text-xs text-muted-foreground">我的贡献</div>
+                      <div className="mt-0.5 flex items-baseline gap-2">
+                        <AnimatedNumber value={myTotalClaims} className="font-mono text-4xl font-light tabular-nums leading-none" />
+                        <span className="text-sm text-muted-foreground">盒</span>
+                      </div>
+                      <div className="mt-1 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <AnimatedNumber value={myProjectShare} format={(v) => `${v}%`} className="font-mono tabular-nums text-foreground" />
+                        项目占比
+                      </div>
+                    </div>
+                  </div>
 
-                      return (
-                        <div key={litematic.id}>
-                          <div className="text-sm text-muted-foreground mb-2">
-                            {litematic.filename}
+                  <div className="flex flex-1 flex-col justify-center gap-3">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <div className="text-[11px] text-muted-foreground">认领</div>
+                        <div className="mt-1 font-mono text-lg font-light tabular-nums">{myTotalClaims}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-muted-foreground">已完成</div>
+                        <div className="mt-1 font-mono text-lg font-light tabular-nums text-emerald-600 dark:text-emerald-400">
+                          {myCollectedBoxes}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-muted-foreground">待完成</div>
+                        <div className="mt-1 font-mono text-lg font-light tabular-nums">{myPendingBoxes}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>个人完成进度</span>
+                        <span className="font-mono tabular-nums text-foreground">{myCollectProgress}%</span>
+                      </div>
+                      <div className="lt-bar-track h-1.5">
+                        <div className="lt-bar-fill-emerald" style={{ width: `${myCollectProgress}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <section className="lt-panel overflow-hidden">
+              <div className="flex items-center justify-between gap-3 border-b border-foreground/10 px-5 py-4 sm:px-6">
+                <div className="text-base font-semibold sm:text-lg">投影进度</div>
+                <div className="text-xs text-muted-foreground">
+                  {project.litematics.length} 个投影
+                </div>
+              </div>
+
+              {project.litematics.length > 0 ? (
+                <div className="divide-y divide-foreground/10">
+                  {litematicSummaries.map((litematic, idx) => {
+                    const collectedShare = litematic.totalBoxes > 0
+                      ? Math.min(Math.round((litematic.collectedBoxes / litematic.totalBoxes) * 100), 100)
+                      : 0;
+                    const isDone = litematic.progress >= 100;
+                    return (
+                      <div
+                        key={litematic.id}
+                        className="lt-row grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-4 px-5 py-4 sm:grid-cols-[36px_minmax(0,1.4fr)_minmax(140px,1fr)_auto_auto] sm:px-6"
+                      >
+                        <div className="font-mono text-xs text-muted-foreground/70 tabular-nums">
+                          {String(idx + 1).padStart(2, "0")}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <FileBox className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <span className="truncate font-medium">{litematic.filename}</span>
+                            {isDone && (
+                              <span className="shrink-0 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                                ✓
+                              </span>
+                            )}
                           </div>
-                          {myClaims.map((claim) => {
-                            const material = litematic.materials.find(
-                              (m) => m.blockId === claim.blockId
-                            );
-                            return (
-                              <div
-                                key={claim.id}
-                                className="flex items-center justify-between py-2 border-b last:border-0"
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {litematic.totalTypes} 种材料 · {litematic.totalBlocks.toLocaleString()} 方块
+                          </div>
+                          <div className="mt-3 sm:hidden">
+                            <div className="lt-bar-track">
+                              <div className="lt-bar-fill" style={{ width: `${litematic.progress}%` }} />
+                              {collectedShare > 0 && (
+                                <div className="lt-bar-fill-emerald" style={{ width: `${collectedShare}%` }} />
+                              )}
+                            </div>
+                            <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
+                              <span className="font-mono tabular-nums">{litematic.progress}%</span>
+                              <span>{litematic.claimedBoxes}/{litematic.totalBoxes} · 收集 {litematic.collectedBoxes}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="hidden sm:block">
+                          <div className="lt-bar-track">
+                            <div className="lt-bar-fill" style={{ width: `${litematic.progress}%` }} />
+                            {collectedShare > 0 && (
+                              <div className="lt-bar-fill-emerald" style={{ width: `${collectedShare}%` }} />
+                            )}
+                          </div>
+                          <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
+                            <span>认领 {litematic.progress}%</span>
+                            <span>收集 {collectedShare}%</span>
+                          </div>
+                        </div>
+
+                        <div className="hidden text-right sm:block">
+                          <div className="font-mono text-base font-light tabular-nums">
+                            {litematic.progress}<span className="text-xs text-muted-foreground">%</span>
+                          </div>
+                        </div>
+
+                        {canEdit && (
+                          <button
+                            onClick={() => handleDeleteLitematic(litematic.id)}
+                            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="px-6 py-12 text-center">
+                  <FileBox className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                  <p className="text-muted-foreground">还没有上传投影文件</p>
+                </div>
+              )}
+            </section>
+
+            {user && myTotalClaims > 0 && (
+              <section className="lt-panel overflow-hidden">
+                <div className="flex items-center justify-between gap-3 border-b border-foreground/10 px-5 py-4 sm:px-6">
+                  <div className="text-base font-semibold sm:text-lg">我的任务</div>
+                  <div className="text-xs text-muted-foreground">{myTotalClaims} 项</div>
+                </div>
+                <div className="divide-y divide-foreground/10">
+                  {project.litematics.flatMap((litematic) =>
+                    project.claims
+                      .filter((claim) => litematic.id === claim.litematicId && sameUsername(claim.username, user.username))
+                      .map((claim) => {
+                        const material = litematic.materials.find((m) => m.blockId === claim.blockId);
+                        const isCollected = claim.collectedAt != null;
+                        return (
+                          <div key={claim.id} className="lt-row flex items-center gap-3 px-5 py-3 sm:px-6">
+                            <BlockIcon blockId={claim.blockId} size={28} />
+                            <div className="min-w-0 flex-1">
+                              <div className={`truncate font-medium ${isCollected ? "text-muted-foreground line-through" : ""}`}>
+                                {material?.displayName || claim.blockId}
+                              </div>
+                              <div className="truncate text-xs text-muted-foreground">
+                                {litematic.filename} · <span className="font-mono tabular-nums">{claim.boxes}</span> 盒
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <button
+                                onClick={() => handleToggleCollected(claim.id, isCollected)}
+                                disabled={togglingClaim === claim.id}
+                                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                                  isCollected
+                                    ? "border-foreground/10 text-muted-foreground hover:bg-foreground/5"
+                                    : "border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
+                                }`}
                               >
-                                <div className="flex items-center gap-3">
-                                  <BlockIcon blockId={claim.blockId} size={24} />
-                                  <div>
-                                    <span className="font-medium">
-                                      {material?.displayName || claim.blockId}
-                                    </span>
-                                    <span className="text-muted-foreground ml-2 flex items-center gap-0.5">
-                                      x {claim.boxes}
-                                      <BlockIconRaw blockId="minecraft:shulker_box" size={14} />
-                                    </span>
-                                  </div>
-                                </div>
+                                {isCollected ? "标为未完成" : "标为完成"}
+                              </button>
+                              {!isCollected && (
                                 <button
                                   onClick={() => handleUnclaim(claim.id)}
-                                  className="text-sm text-destructive hover:underline"
+                                  className="text-xs text-muted-foreground hover:text-destructive"
                                 >
                                   取消认领
                                 </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+              </section>
             )}
+          </div>
+        )}
 
-            {(() => {
-              const userStatsMap: Record<string, { username: string; nickname: string; totalBoxes: number }> = {};
-              project.claims.forEach((claim) => {
-                if (!userStatsMap[claim.username]) {
-                  userStatsMap[claim.username] = { username: claim.username, nickname: claim.nickname, totalBoxes: 0 };
-                }
-                userStatsMap[claim.username].totalBoxes += claim.boxes;
-              });
-              const leaderboard = Object.values(userStatsMap)
-                .sort((a, b) => b.totalBoxes - a.totalBoxes)
-                .slice(0, 5);
-
-              if (leaderboard.length === 0) return null;
-
-              return (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Trophy className="w-5 h-5 text-yellow-500" />
-                      认领排行榜
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {leaderboard.map((stats, index) => (
-                        <div
-                          key={stats.username}
-                          className={`flex items-center gap-3 p-3 rounded-lg ${
-                            index === 0
-                              ? "bg-yellow-500/10"
-                              : index === 1
-                              ? "bg-zinc-400/10"
-                              : index === 2
-                              ? "bg-amber-700/10"
-                              : "bg-muted/30"
-                          }`}
-                        >
-                          <div className="w-6 text-center flex-shrink-0">
-                            {index === 0 ? (
-                              <span className="text-lg">🥇</span>
-                            ) : index === 1 ? (
-                              <span className="text-lg">🥈</span>
-                            ) : index === 2 ? (
-                              <span className="text-lg">🥉</span>
-                            ) : (
-                              <span className="text-sm text-muted-foreground">#{index + 1}</span>
-                            )}
-                          </div>
-                          <McAvatar
-                            username={stats.username}
-                            size={32}
-                            className="w-8 h-8 rounded block-icon flex-shrink-0"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{formatUser(stats.username, stats.nickname)}</div>
-                          </div>
-                          <div className="flex items-center gap-1 text-sm font-medium">
-                            {stats.totalBoxes}
-                            <BlockIconRaw blockId="minecraft:shulker_box" size={16} />
-                          </div>
-                        </div>
-                      ))}
+        {activeTab === "about" && (
+          <Card>
+            <CardHeader className="grid-cols-[1fr_auto] items-center gap-3">
+              <CardTitle>关于项目</CardTitle>
+              {canEdit && !editingAbout && (
+                <button
+                  onClick={startEditingAbout}
+                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Pencil className="h-4 w-4" />
+                  编辑
+                </button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {editingAbout ? (
+                <div className="space-y-3">
+                  <textarea
+                    value={aboutDraft}
+                    onChange={(e) => setAboutDraft(e.target.value)}
+                    rows={6}
+                    maxLength={5000}
+                    placeholder="写下项目介绍、施工说明、坐标、规则或注意事项..."
+                    className="w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  />
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-xs text-muted-foreground">
+                      {aboutDraft.length}/5000
                     </div>
-                  </CardContent>
-                </Card>
-              );
-            })()}
-          </>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingAbout(false);
+                          setAboutDraft("");
+                        }}
+                        disabled={savingAbout}
+                        className="rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-muted disabled:opacity-50"
+                      >
+                        取消
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveAbout}
+                        disabled={savingAbout}
+                        className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        {savingAbout ? "保存中..." : "保存"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : project.about.trim() ? (
+                <p className="whitespace-pre-wrap break-words leading-7 text-muted-foreground">
+                  {project.about}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {canEdit ? "还没有关于信息，点击编辑补充项目说明。" : "暂无关于信息"}
+                </p>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {activeTab === "materials" && (
@@ -676,7 +1092,10 @@ export default function ProjectPage({
                 </CardHeader>
                 <CardContent>
                   {filteredLitematics.length > 1 ? (
-                    <Tabs defaultValue={filteredLitematics[0]?.id}>
+                    <Tabs
+                      value={activeMaterialLitematic?.id}
+                      onValueChange={setActiveMaterialLitematicId}
+                    >
                       <TabsList className="w-full justify-start mb-4 h-auto flex-wrap gap-1">
                         {filteredLitematics.map((litematic) => {
                           const name = litematic.filename.replace(/\.litematic$/i, "");
@@ -689,28 +1108,30 @@ export default function ProjectPage({
                           );
                         })}
                       </TabsList>
-                      {filteredLitematics.map((litematic) => (
-                        <TabsContent key={litematic.id} value={litematic.id}>
+                      {activeMaterialLitematic && (
+                        <TabsContent value={activeMaterialLitematic.id}>
                           <MaterialTable
-                            litematic={litematic}
+                            key={activeMaterialLitematic.id}
+                            litematic={activeMaterialLitematic}
                             user={user}
                             claiming={claiming}
                             onClaim={handleClaim}
                           />
                         </TabsContent>
-                      ))}
+                      )}
                     </Tabs>
                   ) : (
-                    filteredLitematics.map((litematic) => (
-                      <div key={litematic.id}>
+                    activeMaterialLitematic && (
+                      <div key={activeMaterialLitematic.id}>
                         <MaterialTable
-                          litematic={litematic}
+                          key={activeMaterialLitematic.id}
+                          litematic={activeMaterialLitematic}
                           user={user}
                           claiming={claiming}
                           onClaim={handleClaim}
                         />
                       </div>
-                    ))
+                    )
                   )}
                 </CardContent>
               </Card>
@@ -730,234 +1151,198 @@ export default function ProjectPage({
           </>
         )}
 
+        {activeTab === "members" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-muted-foreground" />
+                参与人员
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {memberStats.length > 0 ? (
+                <div className="overflow-hidden rounded-xl border">
+                  <div className="hidden md:grid grid-cols-[48px_minmax(0,1fr)_120px_120px_120px] gap-3 bg-muted/50 px-4 py-2 text-xs text-muted-foreground">
+                    <div>排名</div>
+                    <div>成员</div>
+                    <div className="text-right">认领</div>
+                    <div className="text-right">已收集</div>
+                    <div className="text-right">占比</div>
+                  </div>
+                  <div className="divide-y">
+                    {memberStats.map((member, index) => {
+                      const roleLabel = member.role === "owner" ? "发起人" : member.role === "admin" ? "管理员" : "成员";
+                      return (
+                        <div
+                          key={member.username}
+                          className="grid gap-3 px-4 py-3 md:grid-cols-[48px_minmax(0,1fr)_120px_120px_120px] md:items-center"
+                        >
+                          <div className="hidden md:block text-sm font-medium text-muted-foreground">
+                            #{index + 1}
+                          </div>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="md:hidden w-7 shrink-0 text-sm font-medium text-muted-foreground">
+                              #{index + 1}
+                            </div>
+                            <McAvatar
+                              username={member.username}
+                              size={40}
+                              className="w-10 h-10 rounded block-icon shrink-0"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium truncate">{formatUser(member.username, member.nickname)}</div>
+                              <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                                加入于 {new Date(member.joinedAt).toLocaleDateString("zh-CN")}
+                              </div>
+                            </div>
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
+                                member.role === "owner"
+                                  ? "bg-primary/10 text-primary"
+                                  : member.role === "admin"
+                                  ? "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {roleLabel}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 md:contents">
+                            <div className="rounded-lg bg-muted/40 px-2 py-1.5 text-right md:bg-transparent md:p-0">
+                              <div className="text-[11px] text-muted-foreground md:hidden">认领</div>
+                              <div className="font-semibold tabular-nums flex items-center justify-end gap-1">
+                                {member.claimedBoxes}
+                                <BlockIconRaw blockId="minecraft:shulker_box" size={14} />
+                              </div>
+                              <div className="text-[11px] text-muted-foreground">{member.claimCount} 条</div>
+                            </div>
+                            <div className="rounded-lg bg-muted/40 px-2 py-1.5 text-right md:bg-transparent md:p-0">
+                              <div className="text-[11px] text-muted-foreground md:hidden">已收集</div>
+                              <div className="font-semibold tabular-nums flex items-center justify-end gap-1">
+                                {member.collectedBoxes}
+                                <BlockIconRaw blockId="minecraft:shulker_box" size={14} />
+                              </div>
+                              <div className="text-[11px] text-muted-foreground">{member.collectedPercent}%</div>
+                            </div>
+                            <div className="rounded-lg bg-muted/40 px-2 py-1.5 md:bg-transparent md:p-0">
+                              <div className="flex items-center justify-between gap-2 text-xs">
+                                <span className="text-muted-foreground md:hidden">占比</span>
+                                <span className="ml-auto font-semibold tabular-nums">{member.contributionPercent}%</span>
+                              </div>
+                              <div className="mt-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-primary"
+                                  style={{ width: `${member.contributionPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  暂无参与人员
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {activeTab === "stats" && (
           <>
-            {allMaterials.length > 0 ? (() => {
-              const totalBlocks = project.litematics.reduce((sum, l) => sum + l.totalBlocks, 0);
-              const totalMaterialTypes = new Set(allMaterials.map((m) => m.blockId)).size;
-              const claimedMaterialTypes = new Set(project.claims.map((c) => c.blockId)).size;
-              const uniqueUsers = new Set(project.claims.map((c) => c.username)).size;
-              const avgBoxesPerUser = uniqueUsers > 0 ? Math.round(totalClaimedBoxes / uniqueUsers) : 0;
-
-              const materialClaimMap: Record<string, { claimed: number; total: number; displayName: string }> = {};
-              allMaterials.forEach((m) => {
-                if (!materialClaimMap[m.blockId]) {
-                  materialClaimMap[m.blockId] = { claimed: 0, total: 0, displayName: m.displayName };
-                }
-                materialClaimMap[m.blockId].total += m.boxes;
-              });
-              project.claims.forEach((c) => {
-                if (materialClaimMap[c.blockId]) {
-                  materialClaimMap[c.blockId].claimed += c.boxes;
-                }
-              });
-
-              const mostClaimedMaterial = Object.entries(materialClaimMap)
-                .filter(([, d]) => d.claimed > 0)
-                .sort(([, a], [, b]) => b.claimed - a.claimed)[0];
-              const leastClaimedMaterial = Object.entries(materialClaimMap)
-                .filter(([, d]) => d.total - d.claimed > 0)
-                .sort(([, a], [, b]) => (b.total - b.claimed) - (a.total - a.claimed))[0];
-
-              const userStatsMap: Record<string, {
-                username: string; nickname: string;
-                totalBoxes: number; claimCount: number;
-                materials: { blockId: string; displayName: string; boxes: number }[];
-              }> = {};
-              project.claims.forEach((claim) => {
-                if (!userStatsMap[claim.username]) {
-                  userStatsMap[claim.username] = { username: claim.username, nickname: claim.nickname, totalBoxes: 0, claimCount: 0, materials: [] };
-                }
-                const s = userStatsMap[claim.username];
-                s.totalBoxes += claim.boxes;
-                s.claimCount += 1;
-                const mat = project.litematics.find((l) => l.id === claim.litematicId)?.materials.find((m) => m.blockId === claim.blockId);
-                if (mat) {
-                  const existing = s.materials.find((m) => m.blockId === claim.blockId);
-                  if (existing) existing.boxes += claim.boxes;
-                  else s.materials.push({ blockId: claim.blockId, displayName: mat.displayName, boxes: claim.boxes });
-                }
-              });
-              const userStats = Object.values(userStatsMap).sort((a, b) => b.totalBoxes - a.totalBoxes);
-
-              const pieData = (() => {
-                const top = userStats.slice(0, 8);
-                const rest = userStats.slice(8);
-                const restTotal = rest.reduce((s, u) => s + u.totalBoxes, 0);
-                const data = top.map((u) => ({ name: formatUser(u.username, u.nickname), value: u.totalBoxes }));
-                if (restTotal > 0) data.push({ name: "其他", value: restTotal });
-                return data;
-              })();
-
-              const materialClaimData = Object.entries(materialClaimMap)
-                .map(([blockId, data]) => ({
-                  blockId,
-                  name: data.displayName.length > 6 ? data.displayName.slice(0, 6) + "…" : data.displayName,
-                  fullName: data.displayName,
-                  claimed: data.claimed,
-                  remaining: data.total - data.claimed,
-                  total: data.total,
-                }))
-                .filter((m) => m.claimed > 0)
-                .sort((a, b) => b.claimed - a.claimed)
-                .slice(0, 10);
-
-              return (
-                <div className="space-y-6">
-                  {/* Primary stats */}
-                  <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-                    <Card>
-                      <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">完成度</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold">
-                          {totalBoxes > 0 ? Math.round(claimProgress) : 0}%
-                        </div>
-                        <div className="h-1.5 bg-muted rounded-full mt-2 overflow-hidden">
-                          <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${claimProgress}%` }} />
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">参与人数</CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold">{uniqueUsers}</div>
-                        <p className="text-xs text-muted-foreground mt-1">人均 {avgBoxesPerUser} 盒</p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">已认领</CardTitle>
-                        <Package className="h-4 w-4 text-muted-foreground" />
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold flex items-center gap-1">
-                          {totalClaimedBoxes}
-                          <BlockIconRaw blockId="minecraft:shulker_box" size={20} />
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">共 {project.claims.length} 条记录</p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">待认领</CardTitle>
-                        <Package className="h-4 w-4 text-muted-foreground" />
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold flex items-center gap-1">
-                          {totalBoxes - totalClaimedBoxes}
-                          <BlockIconRaw blockId="minecraft:shulker_box" size={20} />
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">总计 {totalBoxes} 盒</p>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {/* Secondary stats */}
-                  <div className="grid gap-3 grid-cols-3">
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-card">
-                      <FileBox className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div>
-                        <div className="text-xs text-muted-foreground">投影文件</div>
-                        <div className="font-semibold">{project.litematics.length} 个</div>
+            {allMaterials.length > 0 ? (
+              <div className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                      <CardTitle className="text-sm font-medium">认领完成度</CardTitle>
+                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold">{Math.round(claimProgress)}%</div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${claimProgress}%` }} />
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-card">
-                      <Box className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div>
-                        <div className="text-xs text-muted-foreground">总方块数</div>
-                        <div className="font-semibold">{totalBlocks.toLocaleString()}</div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {totalClaimedBoxes}/{totalBoxes} 盒已认领
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                      <CardTitle className="text-sm font-medium">收集完成度</CardTitle>
+                      <Check className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold">{Math.round(collectionProgress)}%</div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-green-500" style={{ width: `${collectionProgress}%` }} />
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-card">
-                      <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div>
-                        <div className="text-xs text-muted-foreground">材料种类</div>
-                        <div className="font-semibold">{claimedMaterialTypes} / {totalMaterialTypes} 种</div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {totalCollectedBoxes}/{totalClaimedBoxes} 盒已收集
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                      <CardTitle className="text-sm font-medium">核心数据</CardTitle>
+                      <Layers className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <div className="text-xl font-bold">{activeMemberCount}</div>
+                          <div className="text-xs text-muted-foreground">活跃人</div>
+                        </div>
+                        <div>
+                          <div className="text-xl font-bold">{claimedMaterialTypes}</div>
+                          <div className="text-xs text-muted-foreground">材料种</div>
+                        </div>
+                        <div>
+                          <div className="text-xl font-bold">{project.claims.length}</div>
+                          <div className="text-xs text-muted-foreground">认领条</div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    </CardContent>
+                  </Card>
+                </div>
 
-                  {/* Highlight cards */}
-                  {(mostClaimedMaterial || leastClaimedMaterial) && (
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {mostClaimedMaterial && (
-                        <Card>
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium">最热门材料</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="flex items-center gap-3">
-                              <BlockIcon blockId={mostClaimedMaterial[0]} size={40} />
-                              <div>
-                                <div className="font-medium">{mostClaimedMaterial[1].displayName}</div>
-                                <div className="text-sm text-muted-foreground">
-                                  已认领 {mostClaimedMaterial[1].claimed} / {mostClaimedMaterial[1].total} 盒
-                                </div>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-                      {leastClaimedMaterial && (
-                        <Card>
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium">最需帮助</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="flex items-center gap-3">
-                              <BlockIcon blockId={leastClaimedMaterial[0]} size={40} />
-                              <div>
-                                <div className="font-medium">{leastClaimedMaterial[1].displayName}</div>
-                                <div className="text-sm text-muted-foreground">
-                                  剩余 {leastClaimedMaterial[1].total - leastClaimedMaterial[1].claimed} / {leastClaimedMaterial[1].total} 盒
-                                </div>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Charts */}
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
                   <div className="grid gap-4 md:grid-cols-2">
                     <Card>
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-base">用户贡献占比</CardTitle>
+                        <CardTitle className="text-base">贡献占比</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="h-[280px]">
+                        <div className="h-[300px]">
                           {pieData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                               <PieChart>
-                                <Pie data={pieData} cx="50%" cy="45%" innerRadius={55} outerRadius={90} paddingAngle={2} dataKey="value">
-                                  {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                                <Pie data={pieData} cx="50%" cy="45%" innerRadius={58} outerRadius={92} paddingAngle={2} dataKey="value">
+                                  {pieData.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
                                 </Pie>
-                                <Tooltip formatter={(value) => [`${value} 盒`, "认领数"]} />
+                                <Tooltip formatter={(value) => [`${value} 盒`, "认领"]} />
                                 <Legend formatter={(value) => <span className="text-xs">{value}</span>} />
                               </PieChart>
                             </ResponsiveContainer>
                           ) : (
-                            <div className="h-full flex items-center justify-center text-muted-foreground">暂无认领数据</div>
+                            <div className="flex h-full items-center justify-center text-muted-foreground">暂无认领数据</div>
                           )}
                         </div>
                       </CardContent>
                     </Card>
                     <Card>
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-base">材料认领进度 Top 10</CardTitle>
+                        <CardTitle className="text-base">材料认领 Top 10</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="h-[280px]">
+                        <div className="h-[300px]">
                           {materialClaimData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={materialClaimData} layout="vertical" margin={{ top: 5, right: 30, left: 5, bottom: 5 }}>
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                              <BarChart data={materialClaimData} layout="vertical" margin={{ top: 5, right: 24, left: 5, bottom: 5 }}>
                                 <XAxis type="number" tick={{ fontSize: 11 }} />
                                 <YAxis type="category" dataKey="name" width={64} tick={{ fontSize: 11 }} />
                                 <Tooltip
@@ -970,73 +1355,111 @@ export default function ProjectPage({
                               </BarChart>
                             </ResponsiveContainer>
                           ) : (
-                            <div className="h-full flex items-center justify-center text-muted-foreground">暂无认领数据</div>
+                            <div className="flex h-full items-center justify-center text-muted-foreground">暂无认领数据</div>
                           )}
                         </div>
                       </CardContent>
                     </Card>
                   </div>
 
-                  {/* Leaderboard */}
-                  {userStats.length > 0 && (
+                  <div className="space-y-4">
                     <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <Trophy className="w-5 h-5 text-yellow-500" />
-                          贡献排行榜
-                        </CardTitle>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">关键材料</CardTitle>
                       </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          {userStats.map((s, index) => {
-                            const pct = totalClaimedBoxes > 0 ? Math.round((s.totalBoxes / totalClaimedBoxes) * 100) : 0;
-                            return (
-                              <div
-                                key={s.username}
-                                className={`flex items-center gap-4 p-4 rounded-xl ${
-                                  index === 0 ? "bg-yellow-500/10 border border-yellow-500/30"
-                                  : index === 1 ? "bg-zinc-400/10 border border-zinc-400/30"
-                                  : index === 2 ? "bg-amber-700/10 border border-amber-700/30"
-                                  : "bg-muted/40 border border-transparent"
-                                }`}
-                              >
-                                <div className="w-7 text-center shrink-0">
-                                  {index === 0 ? <span className="text-xl">🥇</span>
-                                    : index === 1 ? <span className="text-xl">🥈</span>
-                                    : index === 2 ? <span className="text-xl">🥉</span>
-                                    : <span className="text-sm text-muted-foreground">#{index + 1}</span>}
-                                </div>
-                                <McAvatar username={s.username} size={44} className="w-11 h-11 rounded block-icon shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="font-semibold truncate">{formatUser(s.username, s.nickname)}</span>
-                                    <span className="text-sm text-muted-foreground shrink-0">{s.totalBoxes} 盒 · {pct}%</span>
-                                  </div>
-                                  <div className="h-1.5 bg-muted rounded-full mt-1.5 overflow-hidden">
-                                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: COLORS[index % COLORS.length] }} />
-                                  </div>
-                                  <div className="flex flex-wrap gap-1.5 mt-2">
-                                    {s.materials.slice(0, 5).map((m) => (
-                                      <div key={m.blockId} className="flex items-center gap-1 text-xs bg-background/80 px-1.5 py-0.5 rounded border">
-                                        <BlockIcon blockId={m.blockId} size={14} />
-                                        <span className="text-muted-foreground">×{m.boxes}</span>
-                                      </div>
-                                    ))}
-                                    {s.materials.length > 5 && (
-                                      <span className="text-xs text-muted-foreground px-1.5 py-0.5">+{s.materials.length - 5} 种</span>
-                                    )}
-                                  </div>
-                                </div>
+                      <CardContent className="space-y-3">
+                        {mostClaimedMaterial && (
+                          <div className="flex items-center gap-3 rounded-lg bg-muted/40 p-3">
+                            <BlockIcon blockId={mostClaimedMaterial[0]} size={32} />
+                            <div className="min-w-0">
+                              <div className="text-xs text-muted-foreground">最热门</div>
+                              <div className="font-medium truncate">{mostClaimedMaterial[1].displayName}</div>
+                              <div className="text-xs text-muted-foreground">
+                                已认领 {mostClaimedMaterial[1].claimed}/{mostClaimedMaterial[1].total} 盒
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+                          </div>
+                        )}
+                        {leastClaimedMaterial && (
+                          <div className="flex items-center gap-3 rounded-lg bg-muted/40 p-3">
+                            <BlockIcon blockId={leastClaimedMaterial[0]} size={32} />
+                            <div className="min-w-0">
+                              <div className="text-xs text-muted-foreground">最需帮助</div>
+                              <div className="font-medium truncate">{leastClaimedMaterial[1].displayName}</div>
+                              <div className="text-xs text-muted-foreground">
+                                剩余 {leastClaimedMaterial[1].total - leastClaimedMaterial[1].claimed} 盒
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
-                  )}
+
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">贡献最高</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {topContributor ? (
+                          <div className="flex items-center gap-3">
+                            <McAvatar username={topContributor.username} size={40} className="h-10 w-10 rounded block-icon" />
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium truncate">{formatUser(topContributor.username, topContributor.nickname)}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {topContributor.claimedBoxes} 盒 · {topContributor.contributionPercent}%
+                              </div>
+                              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                                <div className="h-full rounded-full bg-primary" style={{ width: `${topContributor.contributionPercent}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="py-6 text-center text-sm text-muted-foreground">暂无贡献数据</div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
-              );
-            })() : (
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">投影完成度</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {litematicSummaries.map((litematic) => (
+                        <div key={litematic.id} className="grid gap-2 rounded-lg border p-3 md:grid-cols-[minmax(0,1fr)_160px_160px] md:items-center">
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{litematic.filename}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {litematic.totalTypes} 种 · {litematic.totalBlocks.toLocaleString()} 方块
+                            </div>
+                          </div>
+                          <div>
+                            <div className="mb-1 flex justify-between text-xs text-muted-foreground">
+                              <span>认领</span>
+                              <span>{litematic.progress}%</span>
+                            </div>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                              <div className="h-full rounded-full bg-primary" style={{ width: `${litematic.progress}%` }} />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="mb-1 flex justify-between text-xs text-muted-foreground">
+                              <span>收集</span>
+                              <span>{litematic.collectionProgress}%</span>
+                            </div>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                              <div className="h-full rounded-full bg-green-500" style={{ width: `${litematic.collectionProgress}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
               <Card>
                 <CardContent className="py-12 text-center">
                   <Layers className="w-12 h-12 mx-auto text-muted-foreground mb-4" />

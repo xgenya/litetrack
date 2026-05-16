@@ -49,10 +49,10 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.975 0.003 250);
+  --foreground: oklch(0.16 0.015 250);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.16 0.015 250);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.205 0 0);
@@ -123,6 +123,24 @@
   }
   body {
     @apply bg-background text-foreground;
+    position: relative;
+    isolation: isolate;
+    padding-top: 3.5rem;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(to right, color-mix(in oklch, var(--foreground) 5%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklch, var(--foreground) 5%, transparent) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-position: -1px -1px;
+    -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 30%, rgba(0, 0, 0, 0.55), transparent 90%);
+    mask-image: radial-gradient(ellipse 75% 65% at 50% 30%, rgba(0, 0, 0, 0.55), transparent 90%);
+    opacity: 0.7;
   }
   html {
     @apply font-sans;
@@ -134,4 +152,307 @@
   image-rendering: -moz-crisp-edges;
   image-rendering: crisp-edges;
   -ms-interpolation-mode: nearest-neighbor;
+}
+
+.lt-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  color: var(--card-foreground);
+  background:
+    radial-gradient(closest-side at 18% 20%, color-mix(in oklch, oklch(0.7 0.1 235) 9%, transparent), transparent 65%),
+    radial-gradient(closest-side at 92% 95%, color-mix(in oklch, oklch(0.75 0.15 165) 8%, transparent), transparent 60%),
+    linear-gradient(160deg,
+      color-mix(in oklch, var(--card) 97%, var(--foreground)),
+      var(--card));
+  border: 1px solid color-mix(in oklch, var(--foreground) 9%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, var(--background) 80%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.03),
+    0 30px 80px -30px color-mix(in oklch, var(--foreground) 22%, transparent);
+}
+
+.lt-hero::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: -30% auto auto -25%;
+  width: 60%;
+  aspect-ratio: 1;
+  pointer-events: none;
+  background: radial-gradient(closest-side, color-mix(in oklch, oklch(0.65 0.1 235) 12%, transparent), transparent 70%);
+  filter: blur(30px);
+}
+
+.lt-hero::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: auto -15% -35% auto;
+  width: 60%;
+  aspect-ratio: 1;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgba(16, 185, 129, 0.12), transparent 70%);
+  filter: blur(30px);
+}
+
+.lt-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.lt-hairline {
+  background-color: color-mix(in oklch, var(--foreground) 12%, transparent);
+}
+
+.lt-wave {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.lt-hero > .lt-wave {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.lt-wave-layer {
+  position: absolute;
+  inset: auto 0 0 0;
+  transition: height 1.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lt-wave-layer::after {
+  content: "";
+  position: absolute;
+  inset: 16px 0 0 0;
+}
+
+.lt-wave-layer::before {
+  content: "";
+  position: absolute;
+  inset: 16px 0 auto 0;
+  height: 1px;
+  z-index: 2;
+  background: linear-gradient(90deg,
+    transparent,
+    color-mix(in oklch, var(--background) 80%, transparent) 35%,
+    color-mix(in oklch, var(--background) 92%, transparent) 50%,
+    color-mix(in oklch, var(--background) 80%, transparent) 65%,
+    transparent);
+  opacity: 0.7;
+  filter: blur(0.4px);
+}
+
+.lt-wave-claim::after {
+  background: linear-gradient(180deg,
+    color-mix(in oklch, oklch(0.6 0.05 235) 14%, transparent) 0%,
+    color-mix(in oklch, oklch(0.5 0.07 235) 22%, transparent) 100%);
+}
+
+.lt-wave-collect::after {
+  background: linear-gradient(180deg,
+    color-mix(in oklch, oklch(0.72 0.16 165) 18%, transparent) 0%,
+    color-mix(in oklch, oklch(0.62 0.17 160) 30%, transparent) 100%);
+}
+
+.lt-wave-svg {
+  position: absolute;
+  left: 0;
+  width: 200%;
+  height: 32px;
+  display: block;
+  animation: lt-wave-glide 5s linear infinite;
+  will-change: transform;
+}
+
+.lt-wave-svg-back {
+  top: -2px;
+  opacity: 0.7;
+  animation-duration: 7s;
+  animation-direction: reverse;
+}
+
+.lt-wave-svg-front {
+  top: 4px;
+  animation-duration: 3.5s;
+}
+
+.lt-wave-claim .lt-wave-svg-back path {
+  fill: color-mix(in oklch, oklch(0.55 0.06 235) 18%, transparent);
+}
+.lt-wave-claim .lt-wave-svg-front path {
+  fill: color-mix(in oklch, oklch(0.5 0.08 235) 26%, transparent);
+}
+.lt-wave-collect .lt-wave-svg-back path {
+  fill: color-mix(in oklch, oklch(0.7 0.17 165) 25%, transparent);
+}
+.lt-wave-collect .lt-wave-svg-front path {
+  fill: color-mix(in oklch, oklch(0.6 0.18 160) 38%, transparent);
+}
+
+.dark .lt-wave-claim .lt-wave-svg-back path {
+  fill: color-mix(in oklch, oklch(0.7 0.08 235) 22%, transparent);
+}
+.dark .lt-wave-claim .lt-wave-svg-front path {
+  fill: color-mix(in oklch, oklch(0.75 0.09 235) 28%, transparent);
+}
+
+@keyframes lt-wave-glide {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-wave-svg,
+  .lt-wave-layer {
+    animation: none;
+    transition: none;
+  }
+}
+
+.lt-percent-disc {
+  width: 176px;
+  height: 176px;
+  color: var(--foreground);
+  border-radius: 999px;
+  padding: 10px;
+  background: color-mix(in oklch, var(--foreground) 5%, transparent);
+}
+
+.lt-percent-disc-ring {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  padding: 10px;
+  transition: background 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lt-percent-disc-core {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  background: var(--card);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--foreground) 9%, transparent),
+    inset 0 1px 0 color-mix(in oklch, var(--background) 70%, transparent);
+}
+
+.lt-percent-chip,
+.lt-mini-percent {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
+  background: color-mix(in oklch, var(--foreground) 4%, transparent);
+}
+
+.lt-percent-chip {
+  min-width: 86px;
+  border-radius: 1rem;
+  padding: 0.55rem 0.7rem;
+  text-align: right;
+}
+
+.lt-mini-percent {
+  min-width: 64px;
+  border-radius: 999px;
+  padding: 0.35rem 0.55rem;
+  text-align: center;
+}
+
+.lt-percent-chip-fill,
+.lt-mini-percent-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: -1;
+  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lt-mini-percent-fill {
+  background: color-mix(in oklch, var(--foreground) 11%, transparent);
+}
+
+.lt-panel {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: var(--card);
+  border: 1px solid color-mix(in oklch, var(--foreground) 9%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, var(--background) 70%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.03),
+    0 12px 30px -22px rgba(0, 0, 0, 0.18);
+}
+
+
+.lt-row {
+  transition: background-color 200ms ease;
+}
+
+.lt-row:hover {
+  background-color: color-mix(in oklch, var(--foreground) 4%, transparent);
+}
+
+.lt-bar-track {
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--foreground) 10%, transparent);
+  overflow: hidden;
+}
+
+.lt-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg,
+    color-mix(in oklch, var(--foreground) 70%, transparent),
+    var(--foreground));
+  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lt-bar-fill-emerald {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #059669, #34d399);
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.45);
+  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lt-bar-fill-light {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.9));
+  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lt-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in oklch, var(--foreground) 55%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-bar-fill,
+  .lt-bar-fill-emerald,
+  .lt-bar-fill-light,
+  .lt-percent-disc-ring,
+  .lt-percent-chip-fill,
+  .lt-mini-percent-fill {
+    transition: none;
+  }
 }

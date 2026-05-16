@@ -79,7 +79,7 @@ export default function MePage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen">
         <TopBar title="我的主页" />
         <div className="max-w-2xl mx-auto px-4 py-20 text-center text-muted-foreground">
           请先登录
@@ -89,7 +89,7 @@ export default function MePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <TopBar title="我的主页" />
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
 

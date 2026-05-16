@@ -91,6 +91,10 @@ export async function DELETE(
     return NextResponse.json({ error: "只能取消自己的认领" }, { status: 403 });
   }
 
+  if (claim.collectedAt != null) {
+    return NextResponse.json({ error: "已完成的认领不能取消" }, { status: 400 });
+  }
+
   const updated = removeClaim(id, claimId);
   if (!updated) {
     return NextResponse.json({ error: "项目不存在" }, { status: 404 });
