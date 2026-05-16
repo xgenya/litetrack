@@ -20,6 +20,7 @@ import {
   KeyRound,
 } from "lucide-react";
 import { Project, ProjectStatus } from "@/lib/types";
+import { sameUsername } from "@/lib/utils";
 
 interface UserEntry {
   username: string;
@@ -426,7 +427,7 @@ function AdminPageContent() {
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-muted-foreground">{new Date(u.createdAt).toLocaleDateString("zh-CN")}</span>
                         <div className="flex items-center gap-1.5">
-                          {u.username !== user!.username.toLowerCase() && (
+                          {!sameUsername(u.username, user!.username) && (
                             <button
                               onClick={() => handleResetPassword(u.username, u.displayUsername)}
                               disabled={resettingPasswordFor === u.username}
@@ -436,7 +437,7 @@ function AdminPageContent() {
                               重置密码
                             </button>
                           )}
-                          {u.username !== user!.username.toLowerCase() && !u.isConfigAdmin && u.isActive && (
+                          {!sameUsername(u.username, user!.username) && !u.isConfigAdmin && u.isActive && (
                             <button
                               onClick={() => handleToggleAdmin(u.username, u.displayUsername, !u.isAdmin)}
                               disabled={togglingAdminFor === u.username}
@@ -446,7 +447,7 @@ function AdminPageContent() {
                               {u.isAdmin ? "移除管理员" : "设为管理员"}
                             </button>
                           )}
-                          {u.username !== user!.username.toLowerCase() && (
+                          {!sameUsername(u.username, user!.username) && (
                             u.isActive ? (
                               <button
                                 onClick={() => handleDeactivateUser(u.username, u.displayUsername)}
@@ -535,7 +536,7 @@ function AdminPageContent() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1.5">
-                            {u.username !== user!.username.toLowerCase() && (
+                            {!sameUsername(u.username, user!.username) && (
                               <button
                                 onClick={() => handleResetPassword(u.username, u.displayUsername)}
                                 disabled={resettingPasswordFor === u.username}
@@ -545,7 +546,7 @@ function AdminPageContent() {
                                 重置密码
                               </button>
                             )}
-                            {u.username !== user!.username.toLowerCase() && !u.isConfigAdmin && u.isActive && (
+                            {!sameUsername(u.username, user!.username) && !u.isConfigAdmin && u.isActive && (
                               <button
                                 onClick={() => handleToggleAdmin(u.username, u.displayUsername, !u.isAdmin)}
                                 disabled={togglingAdminFor === u.username}
@@ -555,7 +556,7 @@ function AdminPageContent() {
                                 {u.isAdmin ? "移除管理员" : "设为管理员"}
                               </button>
                             )}
-                            {u.username !== user!.username.toLowerCase() && (
+                            {!sameUsername(u.username, user!.username) && (
                               u.isActive ? (
                                 <button
                                   onClick={() => handleDeactivateUser(u.username, u.displayUsername)}

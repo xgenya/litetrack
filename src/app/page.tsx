@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TopBar } from "@/components/TopBar";
 import { useUser } from "@/lib/user-context";
 import { Project, ProjectStatus } from "@/lib/types";
-import { formatUser } from "@/lib/utils";
+import { formatUser, sameUsername } from "@/lib/utils";
 import { McAvatar } from "@/components/McAvatar";
 import { AvatarStack } from "@/components/AvatarStack";
 
@@ -105,13 +105,13 @@ export default function Home() {
 
   const canManageProject = (project: Project) => {
     if (!user) return false;
-    return project.owner === user.username || 
-      project.members.some(m => m.username === user.username && m.role === "admin");
+    return sameUsername(project.owner, user.username) ||
+      project.members.some(m => sameUsername(m.username, user.username) && m.role === "admin");
   };
 
   const canDeleteProject = (project: Project) => {
     if (!user) return false;
-    return project.owner === user.username;
+    return sameUsername(project.owner, user.username);
   };
 
   const handleUpdateStatus = async (projectId: string, status: ProjectStatus) => {

@@ -85,7 +85,7 @@ export async function DELETE(
   }
 
   if (
-    claim.username.toLowerCase() !== sessionUser.username &&
+    claim.username.localeCompare(sessionUser.username, undefined, { sensitivity: "accent" }) !== 0 &&
     !sessionUser.isAdmin
   ) {
     return NextResponse.json({ error: "只能取消自己的认领" }, { status: 403 });

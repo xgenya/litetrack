@@ -1,5 +1,5 @@
 import { Claim, Material } from "@/lib/types";
-import { formatUser } from "@/lib/utils";
+import { formatUser, sameUsername } from "@/lib/utils";
 import { getRequiredDisplay } from "@/lib/minecraft";
 import { BlockIcon, BlockIconRaw } from "./BlockIcon";
 import { McAvatar } from "./McAvatar";
@@ -35,7 +35,7 @@ function ClaimList({ claims, currentUser }: { claims: Claim[]; currentUser: stri
         <div
           key={claim.id}
           className={`flex items-center gap-1.5 text-xs ${
-            currentUser && claim.username === currentUser ? "text-primary font-medium" : "text-muted-foreground"
+            currentUser && sameUsername(claim.username, currentUser) ? "text-primary font-medium" : "text-muted-foreground"
           }`}
         >
           <McAvatar username={claim.username} size={16} className="w-4 h-4 rounded flex-shrink-0" />
@@ -241,4 +241,3 @@ export function MaterialTable({ litematic, user, claiming, onClaim }: MaterialTa
     </>
   );
 }
-

@@ -16,7 +16,7 @@ export async function DELETE(
 
   const { username } = await params;
 
-  if (username === sessionUser.username) {
+  if (username.localeCompare(sessionUser.username, undefined, { sensitivity: "accent" }) === 0) {
     return NextResponse.json({ error: "不能禁用自己的账号" }, { status: 400 });
   }
 

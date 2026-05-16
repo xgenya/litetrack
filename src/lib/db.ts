@@ -37,7 +37,50 @@ const DB_PATH = join(process.cwd(), "data", "litematic.db");
 let db: Database.Database | null = null;
 
 function normalizeUsername(username: string): string {
-  return username.trim().toLowerCase();
+  return username.trim();
+}
+
+function usernamesEqual(a: string, b: string): boolean {
+  return a.localeCompare(b, undefined, { sensitivity: "accent" }) === 0;
+}
+
+function migrateUsernamesToDisplayCase(database: Database.Database): void {
+  const users = database
+    .prepare(
+      `SELECT username, display_username
+       FROM users
+       WHERE username != display_username AND TRIM(display_username) != ''`
+    )
+    .all() as Array<{ username: string; display_username: string }>;
+
+  if (users.length === 0) return;
+
+  const updateUser = database.prepare(
+    "UPDATE users SET username = ?, display_username = ? WHERE username = ?"
+  );
+  const updateSessions = database.prepare(
+    "UPDATE sessions SET username = ? WHERE username = ? COLLATE NOCASE"
+  );
+  const updateProjects = database.prepare(
+    "UPDATE projects SET owner = ? WHERE owner = ? COLLATE NOCASE"
+  );
+  const updateMembers = database.prepare(
+    "UPDATE project_members SET username = ? WHERE username = ? COLLATE NOCASE"
+  );
+  const updateClaims = database.prepare(
+    "UPDATE claims SET username = ? WHERE username = ? COLLATE NOCASE"
+  );
+
+  database.transaction(() => {
+    for (const user of users) {
+      const displayUsername = user.display_username.trim();
+      updateUser.run(displayUsername, displayUsername, user.username);
+      updateSessions.run(displayUsername, user.username);
+      updateProjects.run(displayUsername, user.username);
+      updateMembers.run(displayUsername, user.username);
+      updateClaims.run(displayUsername, user.username);
+    }
+  })();
 }
 
 function getDb(): Database.Database {
@@ -152,9 +195,13 @@ function initTables() {
     );
   `);
 
-  // Enforce case-insensitive uniqueness on whitelist (safe to run on existing tables)
+  migrateUsernamesToDisplayCase(database);
+
+  // Enforce case-insensitive uniqueness on user-facing identifiers.
   database.exec(
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_whitelist_username_nocase ON whitelist (username COLLATE NOCASE)`
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_nocase ON users (username COLLATE NOCASE);
+     CREATE UNIQUE INDEX IF NOT EXISTS idx_whitelist_username_nocase ON whitelist (username COLLATE NOCASE);
+     CREATE UNIQUE INDEX IF NOT EXISTS idx_members_project_username_nocase ON project_members (project_id, username COLLATE NOCASE);`
   );
 
   database
@@ -339,7 +386,7 @@ export function getProject(id: string): Project | null {
     name: projectRow.name,
     description: projectRow.description,
     status: projectRow.status,
-    owner: normalizeUsername(projectRow.owner || ""),
+    owner: projectRow.owner || "",
     ownerNickname: projectRow.owner_nickname,
     members,
     litematics,
@@ -360,7 +407,7 @@ function mapProjectRow(
     name: projectRow.name,
     description: projectRow.description,
     status: projectRow.status,
-    owner: normalizeUsername(projectRow.owner || ""),
+    owner: projectRow.owner || "",
     ownerNickname: projectRow.owner_nickname,
     members,
     litematics,
@@ -461,7 +508,7 @@ function getProjectsByIds(ids: string[]): Project[] {
     const claims = claimsByProject.get(c.project_id) ?? [];
     claims.push({
       id: c.id,
-      username: normalizeUsername(c.username),
+      username: c.username,
       nickname: c.nickname,
       blockId: c.block_id,
       litematicId: c.litematic_id,
@@ -476,7 +523,7 @@ function getProjectsByIds(ids: string[]): Project[] {
   for (const m of memberRows) {
     const members = membersByProject.get(m.project_id) ?? [];
     members.push({
-      username: normalizeUsername(m.username),
+      username: m.username,
       nickname: m.nickname,
       role: m.role,
       joinedAt: m.joined_at,
@@ -552,7 +599,7 @@ function getMembersByProject(projectId: string): ProjectMember[] {
   }>;
 
   return members.map((m) => ({
-    username: normalizeUsername(m.username),
+    username: m.username,
     nickname: m.nickname,
     role: m.role,
     joinedAt: m.joined_at,
@@ -617,7 +664,7 @@ export function getUserRole(projectId: string, username: string): ProjectRole | 
     .get(projectId) as { owner: string } | undefined;
 
   if (!project) return null;
-  if (normalizeUsername(project.owner) === canonicalUsername) return "owner";
+  if (usernamesEqual(project.owner, canonicalUsername)) return "owner";
 
   const member = database
     .prepare(
@@ -894,7 +941,7 @@ export function createUser(
   passwordHash: string
 ): UserRecord {
   const database = getDb();
-  const username = displayUsername.toLowerCase();
+  const username = normalizeUsername(displayUsername);
   const now = Date.now();
 
   database
@@ -911,8 +958,8 @@ export function getUserByUsername(username: string): UserRecord | null {
   const database = getDb();
 
   const row = database
-    .prepare("SELECT * FROM users WHERE username = ? AND is_active = 1")
-    .get(username.toLowerCase()) as {
+    .prepare("SELECT * FROM users WHERE username = ? COLLATE NOCASE AND is_active = 1")
+    .get(username.trim()) as {
     username: string;
     display_username: string;
     nickname: string;
@@ -939,8 +986,8 @@ export function getUserByUsernameAny(username: string): UserRecord | null {
   const database = getDb();
 
   const row = database
-    .prepare("SELECT * FROM users WHERE username = ?")
-    .get(username.toLowerCase()) as {
+    .prepare("SELECT * FROM users WHERE username = ? COLLATE NOCASE")
+    .get(username.trim()) as {
     username: string;
     display_username: string;
     nickname: string;
@@ -992,48 +1039,48 @@ export function getAllUsers(): UserRecord[] {
 export function deactivateUser(username: string): boolean {
   const database = getDb();
   const result = database
-    .prepare("UPDATE users SET is_active = 0 WHERE username = ?")
-    .run(username.toLowerCase());
+    .prepare("UPDATE users SET is_active = 0 WHERE username = ? COLLATE NOCASE")
+    .run(username.trim());
   return result.changes > 0;
 }
 
 export function reactivateUser(username: string): boolean {
   const database = getDb();
   const result = database
-    .prepare("UPDATE users SET is_active = 1 WHERE username = ?")
-    .run(username.toLowerCase());
+    .prepare("UPDATE users SET is_active = 1 WHERE username = ? COLLATE NOCASE")
+    .run(username.trim());
   return result.changes > 0;
 }
 
 export function setUserAdmin(username: string, isAdmin: boolean): boolean {
   const database = getDb();
   const result = database
-    .prepare("UPDATE users SET is_admin = ? WHERE username = ?")
-    .run(isAdmin ? 1 : 0, username.toLowerCase());
+    .prepare("UPDATE users SET is_admin = ? WHERE username = ? COLLATE NOCASE")
+    .run(isAdmin ? 1 : 0, username.trim());
   return result.changes > 0;
 }
 
 export function updateNickname(username: string, nickname: string): boolean {
   const database = getDb();
   const result = database
-    .prepare("UPDATE users SET nickname = ? WHERE username = ?")
-    .run(nickname.trim(), username.toLowerCase());
+    .prepare("UPDATE users SET nickname = ? WHERE username = ? COLLATE NOCASE")
+    .run(nickname.trim(), username.trim());
   return result.changes > 0;
 }
 
 export function resetUserPassword(username: string, passwordHash: string): boolean {
   const database = getDb();
   const result = database
-    .prepare("UPDATE users SET password_hash = ? WHERE username = ?")
-    .run(passwordHash, username.toLowerCase());
+    .prepare("UPDATE users SET password_hash = ? WHERE username = ? COLLATE NOCASE")
+    .run(passwordHash, username.trim());
   return result.changes > 0;
 }
 
 export function userExists(username: string): boolean {
   const database = getDb();
   const row = database
-    .prepare("SELECT 1 FROM users WHERE username = ?")
-    .get(username.toLowerCase());
+    .prepare("SELECT 1 FROM users WHERE username = ? COLLATE NOCASE")
+    .get(username.trim());
   return !!row;
 }
 
@@ -1051,7 +1098,7 @@ export function createSession(username: string): string {
     .prepare(
       `INSERT INTO sessions (token, username, created_at, expires_at) VALUES (?, ?, ?, ?)`
     )
-    .run(token, username.toLowerCase(), now, expiresAt);
+    .run(token, username.trim(), now, expiresAt);
 
   return token;
 }
@@ -1088,7 +1135,7 @@ export function deleteSession(token: string): void {
 
 export function deleteUserSessions(username: string): void {
   const database = getDb();
-  database.prepare("DELETE FROM sessions WHERE username = ?").run(username.toLowerCase());
+  database.prepare("DELETE FROM sessions WHERE username = ? COLLATE NOCASE").run(username.trim());
 }
 
 export function deleteExpiredSessions(): void {
@@ -1209,10 +1256,10 @@ export function getUserClaims(username: string): UserClaimDetail[] {
       JOIN projects p ON c.project_id = p.id
       JOIN litematics l ON c.litematic_id = l.id
       LEFT JOIN materials m ON m.litematic_id = c.litematic_id AND m.block_id = c.block_id
-      WHERE c.username = ?
+      WHERE c.username = ? COLLATE NOCASE
       ORDER BY (c.collected_at IS NOT NULL) ASC, c.created_at DESC`
     )
-    .all(username.toLowerCase()) as Array<{
+    .all(username.trim()) as Array<{
     claim_id: string;
     block_id: string;
     boxes: number;
@@ -1243,9 +1290,9 @@ export function markClaimCollected(claimId: string, username: string): boolean {
   const database = getDb();
   const result = database
     .prepare(
-      "UPDATE claims SET collected_at = ? WHERE id = ? AND username = ?"
+      "UPDATE claims SET collected_at = ? WHERE id = ? AND username = ? COLLATE NOCASE"
     )
-    .run(Date.now(), claimId, username.toLowerCase());
+    .run(Date.now(), claimId, username.trim());
   return result.changes > 0;
 }
 
@@ -1253,9 +1300,9 @@ export function markClaimUncollected(claimId: string, username: string): boolean
   const database = getDb();
   const result = database
     .prepare(
-      "UPDATE claims SET collected_at = NULL WHERE id = ? AND username = ?"
+      "UPDATE claims SET collected_at = NULL WHERE id = ? AND username = ? COLLATE NOCASE"
     )
-    .run(claimId, username.toLowerCase());
+    .run(claimId, username.trim());
   return result.changes > 0;
 }
 

@@ -63,13 +63,13 @@ export async function DELETE(
     return NextResponse.json({ error: "项目不存在" }, { status: 404 });
   }
 
-  if (project.owner === targetUsername.toLowerCase()) {
+  if (project.owner.localeCompare(targetUsername, undefined, { sensitivity: "accent" }) === 0) {
     return NextResponse.json({ error: "不能移除项目创建者" }, { status: 400 });
   }
 
   if (
     !canManageProject(id, sessionUser.username) &&
-    sessionUser.username !== targetUsername.toLowerCase()
+    sessionUser.username.localeCompare(targetUsername, undefined, { sensitivity: "accent" }) !== 0
   ) {
     return NextResponse.json({ error: "没有权限移除成员" }, { status: 403 });
   }

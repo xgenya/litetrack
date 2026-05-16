@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, use } from "react";
 import { useUser } from "@/lib/user-context";
 import { Project, Material, Litematic, ProjectRole } from "@/lib/types";
-import { formatUser } from "@/lib/utils";
+import { formatUser, sameUsername } from "@/lib/utils";
 import { toast } from "sonner";
 import { McAvatar } from "@/components/McAvatar";
 import { MaterialTable, MaterialWithClaims } from "@/components/MaterialTable";
@@ -224,7 +224,7 @@ export default function ProjectPage({
         litematicName: litematic.filename,
         claimedBoxes,
         remainingBoxes: m.boxes - claimedBoxes,
-        myClaims: user ? claims.filter((c) => c.username === user.username) : [],
+        myClaims: user ? claims.filter((c) => sameUsername(c.username, user.username)) : [],
         allClaims: claims,
       };
     });
@@ -247,7 +247,7 @@ export default function ProjectPage({
 
   const myTotalClaims = user
     ? project.claims
-        .filter((c) => c.username === user.username)
+        .filter((c) => sameUsername(c.username, user.username))
         .reduce((sum, c) => sum + c.boxes, 0)
     : 0;
 
@@ -498,7 +498,7 @@ export default function ProjectPage({
                       const myClaims = project.claims.filter(
                         (c) =>
                           c.litematicId === litematic.id &&
-                          c.username === user.username
+                          sameUsername(c.username, user.username)
                       );
                       if (myClaims.length === 0) return null;
 

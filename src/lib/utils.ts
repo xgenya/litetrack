@@ -9,3 +9,7 @@ export function cn(...inputs: ClassValue[]) {
 export function formatUser(username: string, nickname?: string | null): string {
   return nickname?.trim() ? `${username}(${nickname.trim()})` : username;
 }
+
+export function sameUsername(a: string, b: string): boolean {
+  return a.localeCompare(b, undefined, { sensitivity: "accent" }) === 0;
+}

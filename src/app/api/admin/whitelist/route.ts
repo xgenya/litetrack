@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "该用户名已在白名单中" }, { status: 409 });
   }
 
-  return NextResponse.json({ success: true, username: username.trim().toLowerCase() });
+  return NextResponse.json({ success: true, username: username.trim() });
 }
 
 export async function DELETE(request: NextRequest) {
