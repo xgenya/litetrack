@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 
 interface BlockIconProps {
   blockId: string;
@@ -15,6 +16,13 @@ interface TextureData {
 interface TexturesJson {
   items: Record<string, TextureData>;
   blocks?: Record<string, TextureData>;
+}
+
+interface TextureState {
+  blockId: string;
+  texture: string | null;
+  loading: boolean;
+  error: boolean;
 }
 
 let texturesCache: TexturesJson | null = null;
@@ -172,84 +180,95 @@ function getTextureSync(blockId: string): string | null {
   return null;
 }
 
-export function BlockIconRaw({ blockId, size = 16 }: BlockIconProps) {
-  const [texture, setTexture] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+function useBlockTexture(blockId: string, warnMissing = false): TextureState {
+  const [state, setState] = useState<TextureState>(() => {
+    const texture = getTextureSync(blockId);
+    return {
+      blockId,
+      texture,
+      loading: !texture,
+      error: false,
+    };
+  });
 
   useEffect(() => {
+    if (getTextureSync(blockId)) return;
+
     let mounted = true;
 
-    const cachedTexture = getTextureSync(blockId);
-    if (cachedTexture) {
-      setTexture(cachedTexture);
-      setLoading(false);
-      return;
-    }
-
-    loadTextures().then(() => {
-      if (!mounted) return;
-      const tex = getTextureSync(blockId);
-      if (tex) {
-        setTexture(tex);
-      } else {
-        setError(true);
-      }
-      setLoading(false);
-    });
+    loadTextures()
+      .then(() => {
+        if (!mounted) return;
+        const texture = getTextureSync(blockId);
+        if (!texture && warnMissing) {
+          console.warn(`[BlockIcon] No texture found for: ${blockId}`);
+        }
+        setState({
+          blockId,
+          texture,
+          loading: false,
+          error: !texture,
+        });
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setState({
+          blockId,
+          texture: null,
+          loading: false,
+          error: true,
+        });
+      });
 
     return () => {
       mounted = false;
     };
-  }, [blockId]);
+  }, [blockId, warnMissing]);
+
+  const cachedTexture = getTextureSync(blockId);
+  if (cachedTexture) {
+    return {
+      blockId,
+      texture: cachedTexture,
+      loading: false,
+      error: false,
+    };
+  }
+
+  if (state.blockId !== blockId) {
+    return {
+      blockId,
+      texture: null,
+      loading: true,
+      error: false,
+    };
+  }
+
+  return state;
+}
+
+export function BlockIconRaw({ blockId, size = 16 }: BlockIconProps) {
+  const { texture, loading, error } = useBlockTexture(blockId);
 
   if (loading || error || !texture) {
     return null;
   }
 
   return (
-    <img
+    <Image
       src={texture}
       alt={blockId.replace("minecraft:", "")}
       width={size}
       height={size}
       className="block-icon inline-block align-middle"
       draggable={false}
+      unoptimized
     />
   );
 }
 
 export function BlockIcon({ blockId, size = 32 }: BlockIconProps) {
-  const [texture, setTexture] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const cachedTexture = getTextureSync(blockId);
-    if (cachedTexture) {
-      setTexture(cachedTexture);
-      setLoading(false);
-      return;
-    }
-
-    loadTextures().then(() => {
-      if (!mounted) return;
-      const tex = getTextureSync(blockId);
-      if (tex) {
-        setTexture(tex);
-      } else {
-        console.warn(`[BlockIcon] No texture found for: ${blockId}`);
-        setError(true);
-      }
-      setLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [blockId]);
+  const { texture, loading, error } = useBlockTexture(blockId, true);
 
   const slotStyle = {
     width: size + 8,
@@ -286,13 +305,14 @@ export function BlockIcon({ blockId, size = 32 }: BlockIconProps) {
       className="flex-shrink-0 flex items-center justify-center"
       style={slotStyle}
     >
-      <img
+      <Image
         src={texture}
         alt={blockId.replace("minecraft:", "")}
         width={size}
         height={size}
         className="block-icon"
         draggable={false}
+        unoptimized
       />
     </div>
   );

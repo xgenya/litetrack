@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllProjects, createProject, getProjectsByUser } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+import { invalidJsonResponse, readJsonBody } from "@/lib/request";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -25,14 +26,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "只有管理员可以创建项目" }, { status: 403 });
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
+    if (!body) return invalidJsonResponse();
     const { name, description } = body;
 
     if (!name || typeof name !== "string" || name.trim() === "") {
       return NextResponse.json({ error: "项目名称不能为空" }, { status: 400 });
     }
 
-    const project = createProject(name.trim(), description?.trim() || "", sessionUser.displayUsername);
+    const project = createProject(
+      name.trim(),
+      typeof description === "string" ? description.trim() : "",
+      sessionUser.username
+    );
     return NextResponse.json(project);
   } catch (error) {
     console.error("Create project error:", error);

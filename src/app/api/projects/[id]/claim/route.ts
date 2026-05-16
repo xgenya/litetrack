@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addClaim, removeClaim, getProject, getLitematic } from "@/lib/db";
+import { addClaimIfAvailable, removeClaim, getProject } from "@/lib/db";
 import { Claim } from "@/lib/types";
 import { getSessionUser } from "@/lib/auth";
+import { invalidJsonResponse, readJsonBody } from "@/lib/request";
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 10);
@@ -18,48 +19,42 @@ export async function POST(
     return NextResponse.json({ error: "请先登录" }, { status: 401 });
   }
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) return invalidJsonResponse();
   const { blockId, litematicId, boxes } = body;
 
-  if (!blockId || !litematicId || !boxes || boxes < 1) {
+  if (
+    typeof blockId !== "string" ||
+    typeof litematicId !== "string" ||
+    typeof boxes !== "number" ||
+    !Number.isInteger(boxes) ||
+    boxes < 1
+  ) {
     return NextResponse.json({ error: "参数错误" }, { status: 400 });
-  }
-
-  const project = getProject(id);
-  if (!project) {
-    return NextResponse.json({ error: "项目不存在" }, { status: 404 });
-  }
-
-  const litematic = getLitematic(litematicId);
-  if (!litematic || litematic.projectId !== id) {
-    return NextResponse.json({ error: "投影不存在" }, { status: 404 });
-  }
-
-  const material = litematic.materials.find((m) => m.blockId === blockId);
-  if (!material) {
-    return NextResponse.json({ error: "材料不存在" }, { status: 404 });
-  }
-
-  const claimedBoxes = project.claims
-    .filter((c) => c.litematicId === litematicId && c.blockId === blockId)
-    .reduce((sum, c) => sum + c.boxes, 0);
-
-  const remainingBoxes = material.boxes - claimedBoxes;
-  if (boxes > remainingBoxes) {
-    return NextResponse.json({ error: "剩余盒数不足" }, { status: 400 });
   }
 
   const claim: Omit<Claim, "litematicId"> = {
     id: generateId(),
-    username: sessionUser.displayUsername,
-    nickname: "",
+    username: sessionUser.username,
+    nickname: sessionUser.nickname,
     blockId,
     boxes,
     createdAt: Date.now(),
   };
 
-  const updated = addClaim(id, litematicId, claim);
-  return NextResponse.json(updated);
+  const result = addClaimIfAvailable(id, litematicId, claim);
+  if (!result.ok) {
+    const errorMap = {
+      project_not_found: { error: "项目不存在", status: 404 },
+      litematic_not_found: { error: "投影不存在", status: 404 },
+      material_not_found: { error: "材料不存在", status: 404 },
+      insufficient_boxes: { error: "剩余盒数不足", status: 400 },
+    } as const;
+    const { error, status } = errorMap[result.error];
+    return NextResponse.json({ error }, { status });
+  }
+
+  return NextResponse.json(result.project);
 }
 
 export async function DELETE(

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWhitelist, addToWhitelist, removeFromWhitelist } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+import { invalidJsonResponse, readJsonBody } from "@/lib/request";
 
 export async function GET(request: NextRequest) {
   const sessionUser = await getSessionUser(request);
@@ -17,7 +18,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "无权访问" }, { status: 403 });
   }
 
-  const { username } = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) return invalidJsonResponse();
+  const { username } = body;
   if (!username || typeof username !== "string" || !username.trim()) {
     return NextResponse.json({ error: "用户名不能为空" }, { status: 400 });
   }
@@ -36,7 +39,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "无权访问" }, { status: 403 });
   }
 
-  const { username } = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) return invalidJsonResponse();
+  const { username } = body;
   if (!username || typeof username !== "string") {
     return NextResponse.json({ error: "用户名不能为空" }, { status: 400 });
   }

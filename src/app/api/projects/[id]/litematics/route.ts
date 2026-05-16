@@ -27,7 +27,7 @@ export async function POST(
       return NextResponse.json({ error: "项目不存在" }, { status: 404 });
     }
 
-    if (!canEditProject(id, sessionUser.displayUsername)) {
+    if (!canEditProject(id, sessionUser.username)) {
       return NextResponse.json({ error: "没有权限上传投影" }, { status: 403 });
     }
 
@@ -73,9 +73,6 @@ export async function POST(
     return NextResponse.json(litematic);
   } catch (error) {
     console.error("Upload litematic error:", error);
-    return NextResponse.json(
-      { error: "上传失败: " + (error as Error).message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "上传失败" }, { status: 500 });
   }
 }

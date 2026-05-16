@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { refreshAllDisplayNames, refreshProjectDisplayNames } from "@/lib/db";
+import { readJsonBody } from "@/lib/request";
 
 export async function POST(request: NextRequest) {
   const sessionUser = await getSessionUser(request);
@@ -8,8 +9,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "无权访问" }, { status: 403 });
   }
 
-  const body = await request.json().catch(() => ({}));
-  const projectId: string | undefined = body?.projectId;
+  const body = await readJsonBody(request);
+  const projectId = typeof body?.projectId === "string" ? body.projectId : undefined;
 
   const updated = projectId
     ? refreshProjectDisplayNames(projectId)

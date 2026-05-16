@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserByUsernameAny, createSession } from "@/lib/db";
 import { verifyPassword, isAdminUsername, buildSessionCookie } from "@/lib/auth";
+import { invalidJsonResponse, readJsonBody } from "@/lib/request";
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password } = await request.json();
+    const body = await readJsonBody(request);
+    if (!body) return invalidJsonResponse();
+    const { username, password } = body;
 
-    if (!username || !password) {
+    if (typeof username !== "string" || typeof password !== "string") {
       return NextResponse.json({ error: "请填写用户名和密码" }, { status: 400 });
     }
 

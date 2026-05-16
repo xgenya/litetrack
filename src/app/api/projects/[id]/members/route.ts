@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { addMember, removeMember, canManageProject, getProject } from "@/lib/db";
 import { ProjectRole } from "@/lib/types";
 import { getSessionUser } from "@/lib/auth";
+import { invalidJsonResponse, readJsonBody } from "@/lib/request";
 
 export async function POST(
   request: NextRequest,
@@ -14,23 +15,25 @@ export async function POST(
     return NextResponse.json({ error: "请先登录" }, { status: 401 });
   }
 
-  if (!canManageProject(id, sessionUser.displayUsername)) {
+  if (!canManageProject(id, sessionUser.username)) {
     return NextResponse.json({ error: "没有权限管理成员" }, { status: 403 });
   }
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) return invalidJsonResponse();
   const { targetUsername, role } = body;
 
-  if (!targetUsername) {
+  if (typeof targetUsername !== "string" || !targetUsername.trim()) {
     return NextResponse.json({ error: "请指定要添加的用户" }, { status: 400 });
   }
 
-  const validRoles: ProjectRole[] = ["admin", "member"];
-  if (role && !validRoles.includes(role)) {
+  const roleValue: ProjectRole | undefined =
+    role === "admin" || role === "member" ? role : undefined;
+  if (role !== undefined && !roleValue) {
     return NextResponse.json({ error: "无效的角色" }, { status: 400 });
   }
 
-  const project = addMember(id, targetUsername, role || "member");
+  const project = addMember(id, targetUsername, roleValue ?? "member");
   if (!project) {
     return NextResponse.json({ error: "项目不存在" }, { status: 404 });
   }
@@ -60,13 +63,13 @@ export async function DELETE(
     return NextResponse.json({ error: "项目不存在" }, { status: 404 });
   }
 
-  if (project.owner.toLowerCase() === targetUsername.toLowerCase()) {
+  if (project.owner === targetUsername.toLowerCase()) {
     return NextResponse.json({ error: "不能移除项目创建者" }, { status: 400 });
   }
 
   if (
-    !canManageProject(id, sessionUser.displayUsername) &&
-    sessionUser.displayUsername.toLowerCase() !== targetUsername.toLowerCase()
+    !canManageProject(id, sessionUser.username) &&
+    sessionUser.username !== targetUsername.toLowerCase()
   ) {
     return NextResponse.json({ error: "没有权限移除成员" }, { status: 403 });
   }

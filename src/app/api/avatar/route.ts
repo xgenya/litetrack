@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 const ALLOWED_SIZES = [8, 16, 24, 32, 48, 64, 128];
 const DEFAULT_SIZE = 32;
+const CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=86400";
+const MINECRAFT_USERNAME_RE = /^[A-Za-z0-9_]{1,16}$/;
 
 function parseSize(raw: string | null): number {
   const n = parseInt(raw ?? "", 10);
@@ -33,14 +35,15 @@ function svgResponse(svg: string) {
   return new NextResponse(svg, {
     headers: {
       "Content-Type": "image/svg+xml",
-      "Cache-Control": "no-store",
+      "Cache-Control": CACHE_CONTROL,
     },
   });
 }
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const username = searchParams.get("username") ?? "";
+  const rawUsername = searchParams.get("username") ?? "";
+  const username = MINECRAFT_USERNAME_RE.test(rawUsername) ? rawUsername : "";
   const size = parseSize(searchParams.get("size"));
 
   if (!username) {
@@ -60,7 +63,7 @@ export async function GET(request: NextRequest) {
         return new NextResponse(buffer, {
           headers: {
             "Content-Type": contentType,
-            "Cache-Control": "no-store",
+            "Cache-Control": CACHE_CONTROL,
           },
         });
       }

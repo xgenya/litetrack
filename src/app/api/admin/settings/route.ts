@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSetting, setSetting } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+import { invalidJsonResponse, readJsonBody } from "@/lib/request";
 
 const ALLOWED_SETTINGS = {
   registration_whitelist_enabled: (v: unknown) =>
@@ -26,7 +27,8 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "无权访问" }, { status: 403 });
   }
 
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) return invalidJsonResponse();
   const { key, value } = body;
 
   if (typeof key !== "string" || !(key in ALLOWED_SETTINGS)) {

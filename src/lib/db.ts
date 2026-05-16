@@ -1,4 +1,6 @@
 import Database from "better-sqlite3";
+import { randomBytes } from "crypto";
+import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { Project, Litematic, Material, Claim, ProjectStatus, ProjectMember, ProjectRole } from "./types";
 import { getBlockDisplayName } from "./block-names";
@@ -20,20 +22,34 @@ export interface SessionRecord {
   expiresAt: number;
 }
 
+export type AddClaimError =
+  | "project_not_found"
+  | "litematic_not_found"
+  | "material_not_found"
+  | "insufficient_boxes";
+
+export type AddClaimResult =
+  | { ok: true; project: Project }
+  | { ok: false; error: AddClaimError };
+
 const DB_PATH = join(process.cwd(), "data", "litematic.db");
 
 let db: Database.Database | null = null;
 
+function normalizeUsername(username: string): string {
+  return username.trim().toLowerCase();
+}
+
 function getDb(): Database.Database {
   if (!db) {
-    const fs = require("fs");
     const dir = join(process.cwd(), "data");
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
     }
 
     db = new Database(DB_PATH);
     db.pragma("journal_mode = WAL");
+    db.pragma("busy_timeout = 5000");
     initTables();
   }
   return db;
@@ -180,21 +196,22 @@ export function createProject(name: string, description: string = "", owner: str
   const database = getDb();
   const id = generateId();
   const now = Date.now();
+  const ownerUsername = normalizeUsername(owner);
 
   database
     .prepare(
       `INSERT INTO projects (id, name, description, status, owner, created_at, updated_at)
        VALUES (?, ?, ?, 'active', ?, ?, ?)`
     )
-    .run(id, name, description, owner, now, now);
+    .run(id, name, description, ownerUsername, now, now);
 
-  if (owner) {
+  if (ownerUsername) {
     database
       .prepare(
         `INSERT INTO project_members (project_id, username, role, joined_at)
          VALUES (?, ?, 'owner', ?)`
       )
-      .run(id, owner, now);
+      .run(id, ownerUsername, now);
   }
 
   return {
@@ -202,9 +219,9 @@ export function createProject(name: string, description: string = "", owner: str
     name,
     description,
     status: "active",
-    owner,
+    owner: ownerUsername,
     ownerNickname: "",
-    members: owner ? [{ username: owner, nickname: "", role: "owner" as const, joinedAt: now }] : [],
+    members: ownerUsername ? [{ username: ownerUsername, nickname: "", role: "owner" as const, joinedAt: now }] : [],
     litematics: [],
     claims: [],
     createdAt: now,
@@ -250,6 +267,55 @@ export function deleteProject(id: string): boolean {
   return result.changes > 0;
 }
 
+interface ProjectRow {
+  id: string;
+  name: string;
+  description: string;
+  status: ProjectStatus;
+  owner: string;
+  owner_nickname: string;
+  created_at: number;
+  updated_at: number;
+}
+
+interface LitematicRow {
+  id: string;
+  project_id: string;
+  filename: string;
+  total_types: number;
+  total_blocks: number;
+  created_at: number;
+}
+
+interface MaterialRow {
+  litematic_id: string;
+  block_id: string;
+  display_name: string;
+  count: number;
+  boxes: number;
+  stacks: number;
+}
+
+interface ClaimRow {
+  id: string;
+  project_id: string;
+  username: string;
+  nickname: string;
+  block_id: string;
+  litematic_id: string;
+  boxes: number;
+  created_at: number;
+  collected_at: number | null;
+}
+
+interface ProjectMemberRow {
+  project_id: string;
+  username: string;
+  nickname: string;
+  role: ProjectRole;
+  joined_at: number;
+}
+
 export function getProject(id: string): Project | null {
   const database = getDb();
 
@@ -260,16 +326,7 @@ export function getProject(id: string): Project | null {
        LEFT JOIN users u ON LOWER(u.username) = LOWER(p.owner)
        WHERE p.id = ?`
     )
-    .get(id) as {
-    id: string;
-    name: string;
-    description: string;
-    status: ProjectStatus;
-    owner: string;
-    owner_nickname: string;
-    created_at: number;
-    updated_at: number;
-  } | undefined;
+    .get(id) as ProjectRow | undefined;
 
   if (!projectRow) return null;
 
@@ -282,7 +339,7 @@ export function getProject(id: string): Project | null {
     name: projectRow.name,
     description: projectRow.description,
     status: projectRow.status,
-    owner: projectRow.owner || "",
+    owner: normalizeUsername(projectRow.owner || ""),
     ownerNickname: projectRow.owner_nickname,
     members,
     litematics,
@@ -292,6 +349,156 @@ export function getProject(id: string): Project | null {
   };
 }
 
+function mapProjectRow(
+  projectRow: ProjectRow,
+  litematics: Litematic[],
+  claims: Claim[],
+  members: ProjectMember[]
+): Project {
+  return {
+    id: projectRow.id,
+    name: projectRow.name,
+    description: projectRow.description,
+    status: projectRow.status,
+    owner: normalizeUsername(projectRow.owner || ""),
+    ownerNickname: projectRow.owner_nickname,
+    members,
+    litematics,
+    claims,
+    createdAt: projectRow.created_at,
+    updatedAt: projectRow.updated_at,
+  };
+}
+
+function getProjectsByIds(ids: string[]): Project[] {
+  if (ids.length === 0) return [];
+
+  const database = getDb();
+  const placeholders = ids.map(() => "?").join(",");
+
+  const projectRows = database
+    .prepare(
+      `SELECT p.*, COALESCE(u.nickname, '') AS owner_nickname
+       FROM projects p
+       LEFT JOIN users u ON LOWER(u.username) = LOWER(p.owner)
+       WHERE p.id IN (${placeholders})`
+    )
+    .all(...ids) as ProjectRow[];
+
+  const litematicRows = database
+    .prepare(
+      `SELECT id, project_id, filename, total_types, total_blocks, created_at
+       FROM litematics
+       WHERE project_id IN (${placeholders})
+       ORDER BY created_at DESC`
+    )
+    .all(...ids) as LitematicRow[];
+
+  const litematicIds = litematicRows.map((l) => l.id);
+  const litematicPlaceholders = litematicIds.map(() => "?").join(",");
+
+  const materialRows = litematicIds.length > 0
+    ? (database
+        .prepare(
+          `SELECT litematic_id, block_id, display_name, count, boxes, stacks
+           FROM materials
+           WHERE litematic_id IN (${litematicPlaceholders})
+           ORDER BY count DESC`
+        )
+        .all(...litematicIds) as MaterialRow[])
+    : [];
+
+  const claimRows = database
+    .prepare(
+      `SELECT c.*, COALESCE(u.nickname, '') AS nickname
+       FROM claims c
+       LEFT JOIN users u ON LOWER(u.username) = LOWER(c.username)
+       WHERE c.project_id IN (${placeholders})
+       ORDER BY c.created_at DESC`
+    )
+    .all(...ids) as ClaimRow[];
+
+  const memberRows = database
+    .prepare(
+      `SELECT pm.project_id, pm.username, pm.role, pm.joined_at, COALESCE(u.nickname, '') AS nickname
+       FROM project_members pm
+       LEFT JOIN users u ON LOWER(u.username) = LOWER(pm.username)
+       WHERE pm.project_id IN (${placeholders})
+       ORDER BY pm.joined_at ASC`
+    )
+    .all(...ids) as ProjectMemberRow[];
+
+  const materialsByLitematic = new Map<string, Material[]>();
+  for (const m of materialRows) {
+    const materials = materialsByLitematic.get(m.litematic_id) ?? [];
+    materials.push({
+      blockId: m.block_id,
+      displayName: m.display_name,
+      count: m.count,
+      boxes: m.boxes,
+      stacks: m.stacks,
+    });
+    materialsByLitematic.set(m.litematic_id, materials);
+  }
+
+  const litematicsByProject = new Map<string, Litematic[]>();
+  for (const l of litematicRows) {
+    const litematics = litematicsByProject.get(l.project_id) ?? [];
+    litematics.push({
+      id: l.id,
+      projectId: l.project_id,
+      filename: l.filename,
+      totalTypes: l.total_types,
+      totalBlocks: l.total_blocks,
+      createdAt: l.created_at,
+      materials: materialsByLitematic.get(l.id) ?? [],
+    });
+    litematicsByProject.set(l.project_id, litematics);
+  }
+
+  const claimsByProject = new Map<string, Claim[]>();
+  for (const c of claimRows) {
+    const claims = claimsByProject.get(c.project_id) ?? [];
+    claims.push({
+      id: c.id,
+      username: normalizeUsername(c.username),
+      nickname: c.nickname,
+      blockId: c.block_id,
+      litematicId: c.litematic_id,
+      boxes: c.boxes,
+      createdAt: c.created_at,
+      collectedAt: c.collected_at ?? null,
+    });
+    claimsByProject.set(c.project_id, claims);
+  }
+
+  const membersByProject = new Map<string, ProjectMember[]>();
+  for (const m of memberRows) {
+    const members = membersByProject.get(m.project_id) ?? [];
+    members.push({
+      username: normalizeUsername(m.username),
+      nickname: m.nickname,
+      role: m.role,
+      joinedAt: m.joined_at,
+    });
+    membersByProject.set(m.project_id, members);
+  }
+
+  const projectById = new Map(
+    projectRows.map((row) => [
+      row.id,
+      mapProjectRow(
+        row,
+        litematicsByProject.get(row.id) ?? [],
+        claimsByProject.get(row.id) ?? [],
+        membersByProject.get(row.id) ?? []
+      ),
+    ])
+  );
+
+  return ids.map((id) => projectById.get(id)).filter((p): p is Project => Boolean(p));
+}
+
 export function getAllProjects(): Project[] {
   const database = getDb();
 
@@ -299,7 +506,7 @@ export function getAllProjects(): Project[] {
     .prepare("SELECT id FROM projects ORDER BY updated_at DESC")
     .all() as Array<{ id: string }>;
 
-  return projects.map((p) => getProject(p.id)!).filter(Boolean);
+  return getProjectsByIds(projects.map((p) => p.id));
 }
 
 export function getProjectsByUser(username: string): Project[] {
@@ -309,12 +516,12 @@ export function getProjectsByUser(username: string): Project[] {
     .prepare(
       `SELECT DISTINCT p.id FROM projects p
        LEFT JOIN project_members pm ON p.id = pm.project_id
-       WHERE p.owner = ? OR pm.username = ?
+       WHERE LOWER(p.owner) = LOWER(?) OR LOWER(pm.username) = LOWER(?)
        ORDER BY p.updated_at DESC`
     )
     .all(username, username) as Array<{ id: string }>;
 
-  return projects.map((p) => getProject(p.id)!).filter(Boolean);
+  return getProjectsByIds(projects.map((p) => p.id));
 }
 
 export function getProjectsByStatus(status: ProjectStatus): Project[] {
@@ -324,7 +531,7 @@ export function getProjectsByStatus(status: ProjectStatus): Project[] {
     .prepare("SELECT id FROM projects WHERE status = ? ORDER BY updated_at DESC")
     .all(status) as Array<{ id: string }>;
 
-  return projects.map((p) => getProject(p.id)!).filter(Boolean);
+  return getProjectsByIds(projects.map((p) => p.id));
 }
 
 function getMembersByProject(projectId: string): ProjectMember[] {
@@ -345,7 +552,7 @@ function getMembersByProject(projectId: string): ProjectMember[] {
   }>;
 
   return members.map((m) => ({
-    username: m.username,
+    username: normalizeUsername(m.username),
     nickname: m.nickname,
     role: m.role,
     joinedAt: m.joined_at,
@@ -359,6 +566,7 @@ export function addMember(
 ): Project | null {
   const database = getDb();
   const now = Date.now();
+  const memberUsername = normalizeUsername(username);
 
   try {
     database
@@ -366,7 +574,7 @@ export function addMember(
         `INSERT INTO project_members (project_id, username, role, joined_at)
          VALUES (?, ?, ?, ?)`
       )
-      .run(projectId, username, role, now);
+      .run(projectId, memberUsername, role, now);
 
     database
       .prepare("UPDATE projects SET updated_at = ? WHERE id = ?")
@@ -375,9 +583,11 @@ export function addMember(
     // Member already exists, update role
     database
       .prepare(
-        `UPDATE project_members SET role = ? WHERE project_id = ? AND username = ?`
+        `UPDATE project_members
+         SET role = ?
+         WHERE project_id = ? AND LOWER(username) = LOWER(?) AND role != 'owner'`
       )
-      .run(role, projectId, username);
+      .run(role, projectId, memberUsername);
   }
 
   return getProject(projectId);
@@ -385,10 +595,11 @@ export function addMember(
 
 export function removeMember(projectId: string, username: string): Project | null {
   const database = getDb();
+  const memberUsername = normalizeUsername(username);
 
   database
-    .prepare("DELETE FROM project_members WHERE project_id = ? AND username = ?")
-    .run(projectId, username);
+    .prepare("DELETE FROM project_members WHERE project_id = ? AND LOWER(username) = LOWER(?)")
+    .run(projectId, memberUsername);
 
   database
     .prepare("UPDATE projects SET updated_at = ? WHERE id = ?")
@@ -399,19 +610,20 @@ export function removeMember(projectId: string, username: string): Project | nul
 
 export function getUserRole(projectId: string, username: string): ProjectRole | null {
   const database = getDb();
+  const canonicalUsername = normalizeUsername(username);
 
   const project = database
     .prepare("SELECT owner FROM projects WHERE id = ?")
     .get(projectId) as { owner: string } | undefined;
 
   if (!project) return null;
-  if (project.owner === username) return "owner";
+  if (normalizeUsername(project.owner) === canonicalUsername) return "owner";
 
   const member = database
     .prepare(
-      "SELECT role FROM project_members WHERE project_id = ? AND username = ?"
+      "SELECT role FROM project_members WHERE project_id = ? AND LOWER(username) = LOWER(?)"
     )
-    .get(projectId, username) as { role: ProjectRole } | undefined;
+    .get(projectId, canonicalUsername) as { role: ProjectRole } | undefined;
 
   return member?.role || null;
 }
@@ -573,35 +785,88 @@ function getClaimsByProject(projectId: string): Claim[] {
   }));
 }
 
-export function addClaim(
+export function addClaimIfAvailable(
   projectId: string,
   litematicId: string,
   claim: Omit<Claim, "litematicId">
-): Project | null {
+): AddClaimResult {
   const database = getDb();
+  const claimUsername = normalizeUsername(claim.username);
 
-  database
-    .prepare(
-      `INSERT INTO claims (id, project_id, litematic_id, username, block_id, boxes, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      claim.id,
-      projectId,
-      litematicId,
-      claim.username,
-      claim.blockId,
-      claim.boxes,
-      claim.createdAt
-    );
+  const result = database.transaction((): { ok: true } | { ok: false; error: AddClaimError } => {
+    const project = database
+      .prepare("SELECT 1 FROM projects WHERE id = ?")
+      .get(projectId);
+    if (!project) {
+      return { ok: false, error: "project_not_found" };
+    }
 
-  database
-    .prepare("UPDATE projects SET updated_at = ? WHERE id = ?")
-    .run(Date.now(), projectId);
+    const litematic = database
+      .prepare("SELECT 1 FROM litematics WHERE id = ? AND project_id = ?")
+      .get(litematicId, projectId);
+    if (!litematic) {
+      return { ok: false, error: "litematic_not_found" };
+    }
 
-  addMember(projectId, claim.username, "member");
+    const material = database
+      .prepare(
+        `SELECT boxes FROM materials
+         WHERE litematic_id = ? AND block_id = ?`
+      )
+      .get(litematicId, claim.blockId) as { boxes: number } | undefined;
+    if (!material) {
+      return { ok: false, error: "material_not_found" };
+    }
 
-  return getProject(projectId);
+    const claimed = database
+      .prepare(
+        `SELECT COALESCE(SUM(boxes), 0) AS boxes FROM claims
+         WHERE project_id = ? AND litematic_id = ? AND block_id = ?`
+      )
+      .get(projectId, litematicId, claim.blockId) as { boxes: number };
+
+    if (claim.boxes > material.boxes - claimed.boxes) {
+      return { ok: false, error: "insufficient_boxes" };
+    }
+
+    const now = Date.now();
+    database
+      .prepare(
+        `INSERT INTO claims (id, project_id, litematic_id, username, block_id, boxes, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        claim.id,
+        projectId,
+        litematicId,
+        claimUsername,
+        claim.blockId,
+        claim.boxes,
+        claim.createdAt
+      );
+
+    database
+      .prepare(
+        `INSERT OR IGNORE INTO project_members (project_id, username, role, joined_at)
+         VALUES (?, ?, 'member', ?)`
+      )
+      .run(projectId, claimUsername, now);
+
+    database
+      .prepare("UPDATE projects SET updated_at = ? WHERE id = ?")
+      .run(now, projectId);
+
+    return { ok: true };
+  })();
+
+  if (!result.ok) return result;
+
+  const project = getProject(projectId);
+  if (!project) {
+    return { ok: false, error: "project_not_found" };
+  }
+
+  return { ok: true, project };
 }
 
 export function removeClaim(projectId: string, claimId: string): Project | null {
@@ -778,7 +1043,7 @@ const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export function createSession(username: string): string {
   const database = getDb();
-  const token = require("crypto").randomBytes(32).toString("hex");
+  const token = randomBytes(32).toString("hex");
   const now = Date.now();
   const expiresAt = now + SESSION_DURATION_MS;
 

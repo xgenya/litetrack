@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { userExists, createUser, createSession, getSetting, isWhitelisted, getUserCount } from "@/lib/db";
 import { hashPassword, isAdminUsername, buildSessionCookie } from "@/lib/auth";
+import { invalidJsonResponse, readJsonBody } from "@/lib/request";
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password } = await request.json();
+    const body = await readJsonBody(request);
+    if (!body) return invalidJsonResponse();
+    const { username, password } = body;
 
     if (!username || typeof username !== "string" || username.trim() === "") {
       return NextResponse.json({ error: "用户名不能为空" }, { status: 400 });

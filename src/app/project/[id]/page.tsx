@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, use } from "react";
-import dynamic from "next/dynamic";
 import { useUser } from "@/lib/user-context";
 import { Project, Material, Litematic, ProjectRole } from "@/lib/types";
 import { formatUser } from "@/lib/utils";
 import { toast } from "sonner";
 import { McAvatar } from "@/components/McAvatar";
-import { MaterialTable, MaterialWithClaims, LitematicWithMaterials } from "@/components/MaterialTable";
+import { MaterialTable, MaterialWithClaims } from "@/components/MaterialTable";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,10 +15,6 @@ import { BlockIcon, BlockIconRaw } from "@/components/BlockIcon";
 import { TopBar } from "@/components/TopBar";
 import { getBlockCategory, CATEGORY_ORDER } from "@/lib/block-categories";
 
-const MaterialCharts = dynamic(
-  () => import("@/components/MaterialCharts").then((m) => m.MaterialCharts),
-  { ssr: false, loading: () => <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">加载图表...</div> }
-);
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";

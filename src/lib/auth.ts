@@ -54,11 +54,12 @@ const COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days in seconds
 export function buildSessionCookie(token: string): string {
   const useSecure = process.env.COOKIE_SECURE !== "false" && process.env.NODE_ENV === "production";
   const secure = useSecure ? "; Secure" : "";
-  return `${COOKIE_NAME}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${COOKIE_MAX_AGE}${secure}`;
+  const expires = new Date(Date.now() + COOKIE_MAX_AGE * 1000).toUTCString();
+  return `${COOKIE_NAME}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${COOKIE_MAX_AGE}; Expires=${expires}${secure}`;
 }
 
 export function buildClearSessionCookie(): string {
-  return `${COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
+  return `${COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
 }
 
 export function getTokenFromRequest(request: NextRequest): string | null {

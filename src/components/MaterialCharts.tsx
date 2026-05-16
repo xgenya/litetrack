@@ -28,6 +28,12 @@ interface MaterialChartsProps {
   materials: Material[];
 }
 
+interface TooltipPayload {
+  fullName?: string;
+  name: string;
+  value: number;
+}
+
 const DIMENSION_COLORS = {
   "主世界": "#82ca9d",
   "下界": "#ff7300",
@@ -49,6 +55,25 @@ function getDimension(blockId: string): string {
     return "末地";
   }
   return "主世界";
+}
+
+function CustomTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: TooltipPayload }>;
+}) {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-background border rounded-lg shadow-lg p-2 text-sm">
+        <p className="font-medium">{data.fullName || data.name}</p>
+        <p className="text-muted-foreground">{data.value.toLocaleString()} 个</p>
+      </div>
+    );
+  }
+  return null;
 }
 
 export function MaterialCharts({ materials }: MaterialChartsProps) {
@@ -93,24 +118,11 @@ export function MaterialCharts({ materials }: MaterialChartsProps) {
         fullName: m.displayName,
         blockId: m.blockId,
         boxes: m.boxes,
-        percentage: Math.round((m.boxes / totalBoxes) * 100),
+        percentage: totalBoxes > 0 ? Math.round((m.boxes / totalBoxes) * 100) : 0,
       }));
 
     return { totalBoxes, totalStacks, doubleChests, top5ByBoxes };
   }, [materials]);
-
-  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: { fullName?: string; name: string; value: number } }> }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-background border rounded-lg shadow-lg p-2 text-sm">
-          <p className="font-medium">{data.fullName || data.name}</p>
-          <p className="text-muted-foreground">{data.value.toLocaleString()} 个</p>
-        </div>
-      );
-    }
-    return null;
-  };
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deactivateUser, deleteUserSessions, setUserAdmin, reactivateUser, resetUserPassword } from "@/lib/db";
 import { getSessionUser, isAdminUsername, hashPassword } from "@/lib/auth";
+import { invalidJsonResponse, readJsonBody } from "@/lib/request";
 
 const RESET_PASSWORD = "123456";
 
@@ -39,7 +40,8 @@ export async function PATCH(
   }
 
   const { username } = await params;
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) return invalidJsonResponse();
 
   // Reset password
   if ("resetPassword" in body && body.resetPassword === true) {

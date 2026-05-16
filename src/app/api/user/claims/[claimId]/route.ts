@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { markClaimCollected, markClaimUncollected } from "@/lib/db";
+import { invalidJsonResponse, readJsonBody } from "@/lib/request";
 
 export async function PATCH(
   request: NextRequest,
@@ -13,7 +14,13 @@ export async function PATCH(
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   }
 
-  const { collected } = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) return invalidJsonResponse();
+  const { collected } = body;
+
+  if (typeof collected !== "boolean") {
+    return NextResponse.json({ error: "参数错误" }, { status: 400 });
+  }
 
   const ok = collected
     ? markClaimCollected(claimId, sessionUser.username)

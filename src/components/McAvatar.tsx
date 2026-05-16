@@ -1,10 +1,12 @@
 "use client";
 
-import { ImgHTMLAttributes, useState, useEffect } from "react";
+import { ComponentProps, useState, useEffect } from "react";
+import Image from "next/image";
 
-interface McAvatarProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> {
+interface McAvatarProps extends Omit<ComponentProps<typeof Image>, "src" | "width" | "height" | "alt"> {
   username: string;
   size?: number;
+  alt?: string;
 }
 
 function buildFallbackDataUrl(username: string, size: number): string {
@@ -30,7 +32,7 @@ function fetchSize(displaySize: number): number {
   return ALLOWED_SIZES[ALLOWED_SIZES.length - 1];
 }
 
-export function McAvatar({ username, size = 32, className, alt, ...props }: McAvatarProps) {
+export function McAvatar({ username, size = 32, className, alt, onError, ...props }: McAvatarProps) {
   const apiSize = fetchSize(size);
   const [src, setSrc] = useState(`/api/avatar?username=${encodeURIComponent(username)}&size=${apiSize}`);
 
@@ -39,13 +41,17 @@ export function McAvatar({ username, size = 32, className, alt, ...props }: McAv
   }, [username, apiSize]);
 
   return (
-    <img
+    <Image
       src={src}
       alt={alt ?? username}
       width={size}
       height={size}
       className={className}
-      onError={() => setSrc(buildFallbackDataUrl(username, size))}
+      onError={(event) => {
+        onError?.(event);
+        setSrc(buildFallbackDataUrl(username, size));
+      }}
+      unoptimized
       {...props}
     />
   );

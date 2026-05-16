@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { getUserByUsername, resetUserPassword } from "@/lib/db";
+import { invalidJsonResponse, readJsonBody } from "@/lib/request";
 
 export async function POST(request: NextRequest) {
   const sessionUser = await getSessionUser(request);
@@ -8,7 +9,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   }
 
-  const { oldPassword, newPassword } = await request.json();
+  const body = await readJsonBody(request);
+  if (!body) return invalidJsonResponse();
+  const { oldPassword, newPassword } = body;
 
   if (!oldPassword || typeof oldPassword !== "string") {
     return NextResponse.json({ error: "请输入原密码" }, { status: 400 });
